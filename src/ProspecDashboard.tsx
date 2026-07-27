@@ -98,6 +98,11 @@ function firstWord(value?: string) {
   return String(value || "").trim().split(/\s+/)[0] || "";
 }
 
+function titleCaseFirst(value?: string) {
+  const clean = String(value || "").trim().toLocaleLowerCase("pt-BR");
+  return clean ? clean.charAt(0).toLocaleUpperCase("pt-BR") + clean.slice(1) : "";
+}
+
 function maskCpf(value?: string) {
   const digits = String(value || "").replace(/\D/g, "");
   if (digits.length !== 11) return value || "CPF não informado";
@@ -201,18 +206,25 @@ function Header({
 
 function HomeView({
   bootstrap,
+  role,
   notify,
 }: {
   bootstrap: AnyRecord;
+  role: string;
   notify: (text: string, tone?: "success" | "error") => void;
 }) {
   const lists = bootstrap.lists || [];
-  const [listId, setListId] = useState("");
-  const [messageType, setMessageType] = useState("");
+  const [listId, setListId] = useState(bootstrap.work_state?.selected_list_id || "");
+  const [messageType, setMessageType] = useState(
+    role === "admin" ? (bootstrap.work_state?.message_type || "") : "follow_up",
+  );
   const [queue, setQueue] = useState<AnyRecord[]>([]);
   const [loading, setLoading] = useState(false);
   const [templateCount, setTemplateCount] = useState(0);
+  const [queueCount, setQueueCount] = useState(0);
+  const [chipCount, setChipCount] = useState(0);
   const [results, setResults] = useState<Record<string, string>>({});
+  const [inProgress, setInProgress] = useState<Record<string, boolean>>({});
 
   const loadQueue = useCallback(async () => {
     if (!listId || !messageType) {
@@ -223,7 +235,9 @@ function HomeView({
     try {
       const data = await api("home", { listId, messageType });
       setQueue(data.queue || []);
+      setQueueCount(data.queue_count || 0);
       setTemplateCount(data.template_count || 0);
+      setChipCount(data.chip_count || 0);
     } catch (error) {
       notify(error instanceof Error ? error.message : "Falha ao carregar.", "error");
     } finally {
@@ -235,7 +249,25 @@ function HomeView({
     loadQueue();
   }, [loadQueue]);
 
-  const openWhatsApp = (contact: AnyRecord) => {
+  const persistSelection = async (nextListId: string, nextMessageType: string) => {
+    try {
+      await api("save_work_state", { listId: nextListId, messageType: nextMessageType });
+    } catch {
+      // Mantém a tela utilizável; a próxima escolha tentará salvar novamente.
+    }
+  };
+
+  const chooseList = (nextListId: string) => {
+    setListId(nextListId);
+    persistSelection(nextListId, messageType);
+  };
+
+  const chooseMessageType = (nextMessageType: string) => {
+    setMessageType(nextMessageType);
+    persistSelection(listId, nextMessageType);
+  };
+
+  const openWhatsApp = async (contact: AnyRecord) => {
     const phone = contact.phones?.[0];
     if (!phone) {
       notify("Este contato não possui telefone válido.", "error");
@@ -247,7 +279,19 @@ function HomeView({
     const href = `https://wa.me/${normalizePhone(
       phone.phone_normalized || phone.phone_original,
     )}${text ? `?text=${encodeURIComponent(text)}` : ""}`;
-    window.open(href, "_blank", "noopener,noreferrer");
+    const popup = window.open(href, "_blank", "noopener,noreferrer");
+    setInProgress((current) => ({ ...current, [contact.id]: true }));
+    try {
+      await api("mark_in_progress", {
+        contactId: contact.id,
+        phoneId: phone.id,
+        templateId: contact.template?.id,
+        chipId: contact.chip?.id,
+      });
+    } catch (error) {
+      if (!popup) notify("Permita a abertura do WhatsApp no navegador.", "error");
+      notify(error instanceof Error ? error.message : "Não foi possível marcar em andamento.", "error");
+    }
   };
 
   const saveResult = async (contact: AnyRecord) => {
@@ -288,7 +332,7 @@ function HomeView({
       <section className="selector-card">
         <label>
           <span>1. Planilha / lista</span>
-          <select value={listId} onChange={(event) => setListId(event.target.value)}>
+          <select value={listId} onChange={(event) => chooseList(event.target.value)}>
             <option value="">Selecione a lista</option>
             {lists.map((list: AnyRecord) => (
               <option key={list.id} value={list.id}>
@@ -302,14 +346,14 @@ function HomeView({
           <div>
             <button
               className={messageType === "first_message" ? "active" : ""}
-              onClick={() => setMessageType("first_message")}
-              disabled={!listId}
+              onClick={() => chooseMessageType("first_message")}
+              disabled={!listId || role !== "admin"}
             >
               1ª mensagem
             </button>
             <button
               className={messageType === "follow_up" ? "active" : ""}
-              onClick={() => setMessageType("follow_up")}
+              onClick={() => chooseMessageType("follow_up")}
               disabled={!listId}
             >
               Follow-up
@@ -318,9 +362,8 @@ function HomeView({
         </div>
         {messageType && listId ? (
           <p className="helper-text">
-            {templateCount
-              ? `${templateCount} modelo(s) serão distribuídos em sequência.`
-              : "Nenhum modelo cadastrado ainda. O WhatsApp abrirá sem texto."}
+            {queueCount} contato(s) nesta fila · {templateCount} modelo(s) · {chipCount} chip(s) ativo(s).
+            {!templateCount ? " O WhatsApp abrirá sem texto." : ""}
           </p>
         ) : null}
       </section>
@@ -346,15 +389,18 @@ function HomeView({
               <div className="contact-card-head">
                 <span className="queue-number">{index + 1}</span>
                 <div>
-                  <h3>{contact.full_name}</h3>
-                  <p>{contact.company || "Empresa não informada"}</p>
+                  <h3>{titleCaseFirst(contact.full_name)}</h3>
+                  <p>{titleCaseFirst(contact.company) || "Empresa não informada"}</p>
                 </div>
-                <span className="status-pill waiting">Na fila</span>
+                <span className={`status-pill ${inProgress[contact.id] || contact.queue_status === "in_progress" ? "active" : "waiting"}`}>
+                  {inProgress[contact.id] || contact.queue_status === "in_progress" ? "Em andamento" : "Na fila"}
+                </span>
               </div>
               <div className="contact-meta">
                 <span>{maskCpf(contact.cpf)}</span>
                 <span>{contact.phones?.length || 0} telefone(s)</span>
                 {contact.template ? <span>{contact.template.name}</span> : null}
+                {contact.chip ? <span>Chip: {contact.chip.name} · +{contact.chip.number}</span> : <span>Sem chip ativo</span>}
               </div>
               {contact.template?.body ? (
                 <div className="message-preview">
@@ -467,7 +513,12 @@ function ListsView({
                 /sem\s*whats|sem\s*wpp/i.test(sheetName),
             };
           })
-          .filter(Boolean);
+          .filter(Boolean)
+          .filter((contact: any) => {
+            if (contact.recovery) return true;
+            const result = String(contact.result || "").trim();
+            return !result || /retorn|sem resposta|vácuo|vacuo|mandei 1.*msg/i.test(result);
+          });
         return { name: sheetName.trim(), contacts };
       }).filter((list) => list.contacts.length);
       const total = lists.reduce((sum, list) => sum + list.contacts.length, 0);
@@ -1563,7 +1614,7 @@ export default function ProspecDashboard({ session }: { session: Session }) {
       {menuOpen ? <button className="drawer-backdrop" onClick={() => setMenuOpen(false)} /> : null}
 
       <main className="app-content">
-        {page === "home" ? <HomeView bootstrap={bootstrap} notify={notify} /> : null}
+        {page === "home" ? <HomeView bootstrap={bootstrap} role={role} notify={notify} /> : null}
         {page === "notifications" ? <NotificationsView notify={notify} /> : null}
         {page === "agenda" ? <AgendaView notify={notify} /> : null}
         {page === "lists" ? (
