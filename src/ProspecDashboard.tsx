@@ -1,0 +1,1424 @@
+"use client";
+
+/* eslint-disable @typescript-eslint/no-explicit-any, react-hooks/set-state-in-effect */
+
+import { useCallback, useEffect, useMemo, useState } from "react";
+import type { Session } from "@supabase/supabase-js";
+import { supabase } from "./supabase";
+
+type PageKey =
+  | "home"
+  | "notifications"
+  | "agenda"
+  | "lists"
+  | "templates"
+  | "reports"
+  | "chips-users"
+  | "profile";
+
+type AnyRecord = Record<string, any>;
+
+const ADMIN_NAV: Array<[PageKey, string, string]> = [
+  ["home", "Início", "⌂"],
+  ["notifications", "Notificações", "●"],
+  ["agenda", "Agenda", "▦"],
+  ["lists", "Listas", "☷"],
+  ["reports", "Relatórios", "▥"],
+  ["chips-users", "Chips e Usuários", "◉"],
+];
+
+const LAWYER_NAV: Array<[PageKey, string, string]> = [
+  ["home", "Início", "⌂"],
+  ["notifications", "Notificações", "●"],
+  ["agenda", "Agenda", "▦"],
+  ["lists", "Listas", "☷"],
+  ["reports", "Relatórios", "▥"],
+  ["profile", "Mais", "•••"],
+];
+
+const TEMPLATE_CATEGORIES = [
+  ["first_message", "1ª Mensagem"],
+  ["audio", "Áudios"],
+  ["post_audio", "Pós-áudio"],
+  ["scheduling", "Agendamento"],
+  ["meeting_reminder", "Lembrete de reunião"],
+  ["post_meeting", "Pós-reunião"],
+  ["contract_sending", "Envio de contrato"],
+  ["follow_up", "Follow-up"],
+  ["post_meeting_follow_up", "Follow-up pós reunião"],
+  ["return", "Retorno"],
+  ["closing", "Encerramento"],
+];
+
+const RESULT_OPTIONS = [
+  "Sem resposta",
+  "Áudio enviado",
+  "Agendamento",
+  "Reunião realizada",
+  "Contrato fechado",
+  "Sem WhatsApp",
+  "Telefone inválido",
+  "Engano",
+  "Cliente com advogado",
+  "Retornar depois",
+];
+
+async function api(action: string, payload: AnyRecord = {}) {
+  const { data, error } = await supabase.functions.invoke("prospec-api", {
+    body: { action, payload },
+  });
+  if (error) {
+    let message = error.message || "Não foi possível concluir.";
+    const context = (error as AnyRecord).context;
+    if (context instanceof Response) {
+      try {
+        const body = await context.json();
+        message = body.error || message;
+      } catch {
+        // Mantém a mensagem original quando a resposta não for JSON.
+      }
+    }
+    throw new Error(message);
+  }
+  if (data?.error) throw new Error(data.error);
+  return data?.data;
+}
+
+function formatDate(value?: string, withTime = true) {
+  if (!value) return "—";
+  return new Intl.DateTimeFormat("pt-BR", {
+    dateStyle: "short",
+    ...(withTime ? { timeStyle: "short" } : {}),
+    timeZone: "America/Porto_Velho",
+  }).format(new Date(value));
+}
+
+function firstWord(value?: string) {
+  return String(value || "").trim().split(/\s+/)[0] || "";
+}
+
+function maskCpf(value?: string) {
+  const digits = String(value || "").replace(/\D/g, "");
+  if (digits.length !== 11) return value || "CPF não informado";
+  return `${digits.slice(0, 3)}.***.***-${digits.slice(-2)}`;
+}
+
+function normalizePhone(value?: string) {
+  const digits = String(value || "").replace(/\D/g, "");
+  if (!digits) return "";
+  return digits.startsWith("55") ? digits : `55${digits}`;
+}
+
+function substituteTemplate(body: string, contact: AnyRecord) {
+  return body
+    .replaceAll("{NOME}", contact.first_name || firstWord(contact.full_name))
+    .replaceAll("{nome}", contact.first_name || firstWord(contact.full_name))
+    .replaceAll(
+      "{EMPRESA}",
+      contact.company_first_name || firstWord(contact.company),
+    )
+    .replaceAll(
+      "{empresa}",
+      contact.company_first_name || firstWord(contact.company),
+    );
+}
+
+function Toast({
+  message,
+  tone = "success",
+  onClose,
+}: {
+  message: string;
+  tone?: "success" | "error";
+  onClose: () => void;
+}) {
+  useEffect(() => {
+    const timer = window.setTimeout(onClose, 3500);
+    return () => window.clearTimeout(timer);
+  }, [onClose]);
+  return (
+    <button className={`toast ${tone}`} onClick={onClose}>
+      {message}
+    </button>
+  );
+}
+
+function LoadingBlock({ label = "Carregando..." }: { label?: string }) {
+  return (
+    <div className="loading-block" role="status">
+      <span className="spinner" />
+      <span>{label}</span>
+    </div>
+  );
+}
+
+function EmptyState({
+  icon = "◇",
+  title,
+  text,
+}: {
+  icon?: string;
+  title: string;
+  text: string;
+}) {
+  return (
+    <div className="empty-state">
+      <span className="empty-icon">{icon}</span>
+      <strong>{title}</strong>
+      <p>{text}</p>
+    </div>
+  );
+}
+
+function Header({
+  title,
+  subtitle,
+  onMenu,
+  badge,
+}: {
+  title: string;
+  subtitle: string;
+  onMenu: () => void;
+  badge?: number;
+}) {
+  return (
+    <header className="app-header">
+      <button className="icon-button menu-button" onClick={onMenu} aria-label="Abrir menu">
+        ☰
+      </button>
+      <div className="header-copy">
+        <h1>{title}</h1>
+        <p>{subtitle}</p>
+      </div>
+      <div className="header-logo" aria-label="PROSPEC KR">
+        <span>KR</span>
+        {badge ? <b>{badge > 99 ? "99+" : badge}</b> : null}
+      </div>
+    </header>
+  );
+}
+
+function HomeView({
+  bootstrap,
+  notify,
+}: {
+  bootstrap: AnyRecord;
+  notify: (text: string, tone?: "success" | "error") => void;
+}) {
+  const lists = bootstrap.lists || [];
+  const [listId, setListId] = useState("");
+  const [messageType, setMessageType] = useState("");
+  const [queue, setQueue] = useState<AnyRecord[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [templateCount, setTemplateCount] = useState(0);
+  const [results, setResults] = useState<Record<string, string>>({});
+
+  const loadQueue = useCallback(async () => {
+    if (!listId || !messageType) {
+      setQueue([]);
+      return;
+    }
+    setLoading(true);
+    try {
+      const data = await api("home", { listId, messageType });
+      setQueue(data.queue || []);
+      setTemplateCount(data.template_count || 0);
+    } catch (error) {
+      notify(error instanceof Error ? error.message : "Falha ao carregar.", "error");
+    } finally {
+      setLoading(false);
+    }
+  }, [listId, messageType, notify]);
+
+  useEffect(() => {
+    loadQueue();
+  }, [loadQueue]);
+
+  const openWhatsApp = (contact: AnyRecord) => {
+    const phone = contact.phones?.[0];
+    if (!phone) {
+      notify("Este contato não possui telefone válido.", "error");
+      return;
+    }
+    const text = contact.template?.body
+      ? substituteTemplate(contact.template.body, contact)
+      : "";
+    const href = `https://wa.me/${normalizePhone(
+      phone.phone_normalized || phone.phone_original,
+    )}${text ? `?text=${encodeURIComponent(text)}` : ""}`;
+    window.open(href, "_blank", "noopener,noreferrer");
+  };
+
+  const saveResult = async (contact: AnyRecord) => {
+    const result = results[contact.id];
+    if (!result) {
+      notify("Escolha o resultado antes de salvar.", "error");
+      return;
+    }
+    try {
+      await api("record_result", {
+        contactId: contact.id,
+        phoneId: contact.phones?.[0]?.id,
+        result,
+      });
+      notify(
+        result === "Sem WhatsApp" || result === "Telefone inválido"
+          ? "Contato enviado para Recuperação."
+          : "Resultado registrado.",
+      );
+      setQueue((current) => current.filter((item) => item.id !== contact.id));
+      window.setTimeout(loadQueue, 250);
+    } catch (error) {
+      notify(error instanceof Error ? error.message : "Não foi possível salvar.", "error");
+    }
+  };
+
+  return (
+    <div className="page-stack">
+      <section className="hero-card">
+        <div>
+          <p className="eyebrow">FILA DE PROSPECÇÃO</p>
+          <h2>Escolha uma lista para começar</h2>
+          <p>Primeiro selecione a lista. Depois defina a abordagem da fila.</p>
+        </div>
+        <span className="hero-count">{bootstrap.counters?.contacts || 0}</span>
+      </section>
+
+      <section className="selector-card">
+        <label>
+          <span>1. Planilha / lista</span>
+          <select value={listId} onChange={(event) => setListId(event.target.value)}>
+            <option value="">Selecione a lista</option>
+            {lists.map((list: AnyRecord) => (
+              <option key={list.id} value={list.id}>
+                {list.name} ({list.contacts_count})
+              </option>
+            ))}
+          </select>
+        </label>
+        <div className="approach-picker">
+          <span>2. Tipo de mensagem</span>
+          <div>
+            <button
+              className={messageType === "first_message" ? "active" : ""}
+              onClick={() => setMessageType("first_message")}
+              disabled={!listId}
+            >
+              1ª mensagem
+            </button>
+            <button
+              className={messageType === "follow_up" ? "active" : ""}
+              onClick={() => setMessageType("follow_up")}
+              disabled={!listId}
+            >
+              Follow-up
+            </button>
+          </div>
+        </div>
+        {messageType && listId ? (
+          <p className="helper-text">
+            {templateCount
+              ? `${templateCount} modelo(s) serão distribuídos em sequência.`
+              : "Nenhum modelo cadastrado ainda. O WhatsApp abrirá sem texto."}
+          </p>
+        ) : null}
+      </section>
+
+      {!listId || !messageType ? (
+        <EmptyState
+          icon="↗"
+          title="A fila aparece depois das duas escolhas"
+          text="Selecione a lista e o tipo de mensagem para carregar os próximos cinco contatos."
+        />
+      ) : loading ? (
+        <LoadingBlock label="Preparando os próximos contatos..." />
+      ) : queue.length === 0 ? (
+        <EmptyState
+          icon="✓"
+          title="Nenhum contato disponível nesta fila"
+          text="Os contatos concluídos ou em Recuperação não aparecem aqui."
+        />
+      ) : (
+        <section className="queue-grid">
+          {queue.map((contact, index) => (
+            <article className="contact-card" key={contact.id}>
+              <div className="contact-card-head">
+                <span className="queue-number">{index + 1}</span>
+                <div>
+                  <h3>{contact.full_name}</h3>
+                  <p>{contact.company || "Empresa não informada"}</p>
+                </div>
+                <span className="status-pill waiting">Na fila</span>
+              </div>
+              <div className="contact-meta">
+                <span>{maskCpf(contact.cpf)}</span>
+                <span>{contact.phones?.length || 0} telefone(s)</span>
+                {contact.template ? <span>{contact.template.name}</span> : null}
+              </div>
+              {contact.template?.body ? (
+                <div className="message-preview">
+                  {substituteTemplate(contact.template.body, contact)}
+                </div>
+              ) : null}
+              <div className="contact-actions">
+                <button className="whatsapp-button" onClick={() => openWhatsApp(contact)}>
+                  WhatsApp
+                </button>
+                <select
+                  value={results[contact.id] || ""}
+                  onChange={(event) =>
+                    setResults((current) => ({
+                      ...current,
+                      [contact.id]: event.target.value,
+                    }))
+                  }
+                >
+                  <option value="">Resultado</option>
+                  {RESULT_OPTIONS.map((result) => (
+                    <option key={result}>{result}</option>
+                  ))}
+                </select>
+                <button className="outline-button compact" onClick={() => saveResult(contact)}>
+                  Salvar
+                </button>
+              </div>
+            </article>
+          ))}
+        </section>
+      )}
+    </div>
+  );
+}
+
+function ListsView({
+  bootstrap,
+  notify,
+}: {
+  bootstrap: AnyRecord;
+  notify: (text: string, tone?: "success" | "error") => void;
+}) {
+  const [tab, setTab] = useState<"lists" | "contacts" | "recovery">("lists");
+  const [listId, setListId] = useState("");
+  const [search, setSearch] = useState("");
+  const [contacts, setContacts] = useState<AnyRecord[]>([]);
+  const [contactCount, setContactCount] = useState(0);
+  const [recovery, setRecovery] = useState<AnyRecord[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [phoneInputs, setPhoneInputs] = useState<Record<string, string>>({});
+
+  const loadContacts = useCallback(async () => {
+    setLoading(true);
+    try {
+      const data = await api("contacts", { listId, search });
+      setContacts(data.contacts || []);
+      setContactCount(data.count || 0);
+    } catch (error) {
+      notify(error instanceof Error ? error.message : "Falha ao carregar.", "error");
+    } finally {
+      setLoading(false);
+    }
+  }, [listId, search, notify]);
+
+  const loadRecovery = useCallback(async () => {
+    setLoading(true);
+    try {
+      setRecovery((await api("recovery")) || []);
+    } catch (error) {
+      notify(error instanceof Error ? error.message : "Falha ao carregar.", "error");
+    } finally {
+      setLoading(false);
+    }
+  }, [notify]);
+
+  useEffect(() => {
+    if (tab === "contacts") loadContacts();
+    if (tab === "recovery") loadRecovery();
+  }, [tab, loadContacts, loadRecovery]);
+
+  const openTelegram = async (item: AnyRecord) => {
+    const cpf = item.contacts?.cpf || "";
+    const command = cpf ? `/cpf ${cpf}` : item.telegram_query || "";
+    if (command && navigator.clipboard) {
+      await navigator.clipboard.writeText(command);
+      notify("Comando do CPF copiado. Cole no bot do Telegram.");
+    }
+    window.open(
+      "https://web.telegram.org/k/#@NeoSystemBuscas_bot",
+      "_blank",
+      "noopener,noreferrer",
+    );
+  };
+
+  const completeRecovery = async (item: AnyRecord) => {
+    const phone = phoneInputs[item.id];
+    if (!phone) {
+      notify("Digite o novo telefone encontrado.", "error");
+      return;
+    }
+    try {
+      await api("recover_contact", { recoveryId: item.id, phone });
+      notify("Telefone validado. Contato devolvido ao fim da fila.");
+      setRecovery((current) => current.filter((row) => row.id !== item.id));
+    } catch (error) {
+      notify(error instanceof Error ? error.message : "Não foi possível salvar.", "error");
+    }
+  };
+
+  return (
+    <div className="page-stack">
+      <div className="segmented-tabs three">
+        <button className={tab === "lists" ? "active" : ""} onClick={() => setTab("lists")}>
+          Listas
+        </button>
+        <button
+          className={tab === "contacts" ? "active" : ""}
+          onClick={() => setTab("contacts")}
+        >
+          Contatos
+        </button>
+        <button
+          className={tab === "recovery" ? "active" : ""}
+          onClick={() => setTab("recovery")}
+        >
+          Recuperação
+          {bootstrap.counters?.recovery ? (
+            <b>{bootstrap.counters.recovery}</b>
+          ) : null}
+        </button>
+      </div>
+
+      {tab === "lists" ? (
+        <section className="list-grid">
+          {(bootstrap.lists || []).map((list: AnyRecord) => (
+            <article className="list-card" key={list.id}>
+              <div className="list-card-title">
+                <div className="list-icon">▤</div>
+                <div>
+                  <h3>{list.name}</h3>
+                  <p>{list.bank || list.origin_bank || "Lista importada"}</p>
+                </div>
+                <span className={`status-pill ${list.paused ? "paused" : "active"}`}>
+                  {list.paused ? "Pausada" : "Ativa"}
+                </span>
+              </div>
+              <div className="metric-row">
+                <div>
+                  <strong>{list.contacts_count}</strong>
+                  <span>contatos</span>
+                </div>
+                <div>
+                  <strong>{list.recovery_count}</strong>
+                  <span>recuperação</span>
+                </div>
+              </div>
+              <button
+                className="outline-button full"
+                onClick={() => {
+                  setListId(list.id);
+                  setTab("contacts");
+                }}
+              >
+                Abrir contatos
+              </button>
+            </article>
+          ))}
+        </section>
+      ) : null}
+
+      {tab === "contacts" ? (
+        <>
+          <section className="toolbar-card">
+            <select value={listId} onChange={(event) => setListId(event.target.value)}>
+              <option value="">Todas as listas</option>
+              {(bootstrap.lists || []).map((list: AnyRecord) => (
+                <option key={list.id} value={list.id}>
+                  {list.name}
+                </option>
+              ))}
+            </select>
+            <input
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder="Buscar nome, CPF ou empresa"
+              onKeyDown={(event) => event.key === "Enter" && loadContacts()}
+            />
+            <button className="outline-button compact" onClick={loadContacts}>
+              Buscar
+            </button>
+          </section>
+          <p className="section-count">{contactCount} contato(s) encontrados</p>
+          {loading ? (
+            <LoadingBlock />
+          ) : (
+            <section className="contact-list">
+              {contacts.map((contact) => (
+                <article className="contact-row" key={contact.id}>
+                  <div className="avatar">{firstWord(contact.full_name).slice(0, 1)}</div>
+                  <div className="contact-row-main">
+                    <strong>{contact.full_name}</strong>
+                    <span>{contact.company || "Empresa não informada"}</span>
+                    <small>
+                      {maskCpf(contact.cpf)} · {contact.phones?.length || 0} telefone(s)
+                    </small>
+                  </div>
+                  <span className={`status-pill ${contact.queue_status}`}>
+                    {contact.current_result || "Pendente"}
+                  </span>
+                </article>
+              ))}
+            </section>
+          )}
+        </>
+      ) : null}
+
+      {tab === "recovery" ? (
+        loading ? (
+          <LoadingBlock label="Carregando Recuperação..." />
+        ) : recovery.length === 0 ? (
+          <EmptyState
+            icon="✓"
+            title="Recuperação em dia"
+            text="Nenhum contato aguarda um novo telefone."
+          />
+        ) : (
+          <section className="recovery-grid">
+            {recovery.map((item) => (
+              <article className="recovery-card" key={item.id}>
+                <div className="contact-card-head">
+                  <div className="avatar orange">
+                    {firstWord(item.contacts?.full_name).slice(0, 1)}
+                  </div>
+                  <div>
+                    <h3>{item.contacts?.full_name}</h3>
+                    <p>{item.contacts?.company || "Empresa não informada"}</p>
+                  </div>
+                  <span className="status-pill risk">Sem WhatsApp</span>
+                </div>
+                <div className="recovery-details">
+                  <span>{maskCpf(item.contacts?.cpf)}</span>
+                  <span>{item.contact_lists?.name || "Lista original"}</span>
+                  <span>{item.attempts || 0} tentativa(s)</span>
+                </div>
+                <button className="telegram-button" onClick={() => openTelegram(item)}>
+                  Copiar CPF e abrir Telegram
+                </button>
+                <div className="inline-form">
+                  <input
+                    value={phoneInputs[item.id] || ""}
+                    onChange={(event) =>
+                      setPhoneInputs((current) => ({
+                        ...current,
+                        [item.id]: event.target.value,
+                      }))
+                    }
+                    placeholder="Novo telefone com DDD"
+                    inputMode="tel"
+                  />
+                  <button className="outline-button compact" onClick={() => completeRecovery(item)}>
+                    Validar
+                  </button>
+                </div>
+              </article>
+            ))}
+          </section>
+        )
+      ) : null}
+    </div>
+  );
+}
+
+function TemplatesView({
+  role,
+  notify,
+}: {
+  role: string;
+  notify: (text: string, tone?: "success" | "error") => void;
+}) {
+  const allowedCategories = TEMPLATE_CATEGORIES.filter(([key]) => {
+    if (role === "admin") return key !== "post_meeting_follow_up";
+    return !["first_message", "follow_up", "return"].includes(key);
+  });
+  const [category, setCategory] = useState(allowedCategories[0][0]);
+  const [templates, setTemplates] = useState<AnyRecord[]>([]);
+  const [body, setBody] = useState("");
+  const [name, setName] = useState("");
+  const [editingId, setEditingId] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      setTemplates((await api("templates", { category })) || []);
+    } catch (error) {
+      notify(error instanceof Error ? error.message : "Falha ao carregar.", "error");
+    } finally {
+      setLoading(false);
+    }
+  }, [category, notify]);
+
+  useEffect(() => {
+    setBody("");
+    setName("");
+    setEditingId("");
+    load();
+  }, [load]);
+
+  const save = async () => {
+    try {
+      await api("save_template", { id: editingId || undefined, category, name, body });
+      notify(editingId ? "Modelo atualizado." : "Modelo criado.");
+      setBody("");
+      setName("");
+      setEditingId("");
+      load();
+    } catch (error) {
+      notify(error instanceof Error ? error.message : "Não foi possível salvar.", "error");
+    }
+  };
+
+  const remove = async (id: string) => {
+    try {
+      await api("delete_template", { id });
+      notify("Modelo removido.");
+      load();
+    } catch (error) {
+      notify(error instanceof Error ? error.message : "Não foi possível remover.", "error");
+    }
+  };
+
+  return (
+    <div className="page-stack">
+      <section className="category-strip">
+        {allowedCategories.map(([key, label]) => (
+          <button
+            key={key}
+            className={category === key ? "active" : ""}
+            onClick={() => setCategory(key)}
+          >
+            {label}
+          </button>
+        ))}
+      </section>
+
+      <section className="editor-card">
+        <div className="editor-head">
+          <div>
+            <p className="eyebrow">BIBLIOTECA DE MENSAGENS</p>
+            <h2>{allowedCategories.find(([key]) => key === category)?.[1]}</h2>
+          </div>
+          <span>
+            {templates.length}/{["first_message", "follow_up"].includes(category) ? 300 : 100}
+          </span>
+        </div>
+        <input
+          value={name}
+          onChange={(event) => setName(event.target.value)}
+          placeholder="Nome do modelo (opcional)"
+        />
+        <textarea
+          value={body}
+          onChange={(event) => setBody(event.target.value)}
+          placeholder="Digite o texto do modelo. Use {NOME} e {EMPRESA} para preencher automaticamente."
+          rows={7}
+        />
+        <div className="variable-row">
+          <button onClick={() => setBody((current) => `${current}{NOME}`)}>+ {"{NOME}"}</button>
+          <button onClick={() => setBody((current) => `${current}{EMPRESA}`)}>
+            + {"{EMPRESA}"}
+          </button>
+          <button className="primary-button small" onClick={save}>
+            {editingId ? "Atualizar modelo" : "Salvar modelo"}
+          </button>
+        </div>
+      </section>
+
+      {loading ? (
+        <LoadingBlock />
+      ) : templates.length === 0 ? (
+        <EmptyState
+          icon="✎"
+          title="Biblioteca vazia"
+          text="Os modelos começam vazios, como aprovado. Crie o primeiro acima."
+        />
+      ) : (
+        <section className="template-list">
+          {templates.map((template) => (
+            <article className="template-card" key={template.id}>
+              <span className="template-number">
+                {String(template.position).padStart(3, "0")}
+              </span>
+              <div>
+                <strong>{template.name}</strong>
+                <p>{template.body}</p>
+                <small>Usado {template.usage_count || 0} vez(es)</small>
+              </div>
+              <div className="template-actions">
+                <button
+                  onClick={() => {
+                    setEditingId(template.id);
+                    setName(template.name);
+                    setBody(template.body);
+                    window.scrollTo({ top: 0, behavior: "smooth" });
+                  }}
+                >
+                  Editar
+                </button>
+                <button className="danger-text" onClick={() => remove(template.id)}>
+                  Excluir
+                </button>
+              </div>
+            </article>
+          ))}
+        </section>
+      )}
+    </div>
+  );
+}
+
+function AgendaView({
+  notify,
+}: {
+  notify: (text: string, tone?: "success" | "error") => void;
+}) {
+  const [view, setView] = useState("week");
+  const [appointments, setAppointments] = useState<AnyRecord[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [showForm, setShowForm] = useState(false);
+  const [title, setTitle] = useState("");
+  const [startsAt, setStartsAt] = useState("");
+
+  const range = useMemo(() => {
+    const now = new Date();
+    const from = new Date(now);
+    const to = new Date(now);
+    if (view === "today" || view === "day") {
+      from.setHours(0, 0, 0, 0);
+      to.setHours(23, 59, 59, 999);
+    } else if (view === "week") {
+      from.setDate(now.getDate() - now.getDay());
+      from.setHours(0, 0, 0, 0);
+      to.setDate(from.getDate() + 7);
+    } else {
+      from.setDate(1);
+      from.setHours(0, 0, 0, 0);
+      to.setMonth(from.getMonth() + 1);
+      to.setDate(0);
+      to.setHours(23, 59, 59, 999);
+    }
+    return { from: from.toISOString(), to: to.toISOString() };
+  }, [view]);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      setAppointments((await api("appointments", range)) || []);
+    } catch (error) {
+      notify(error instanceof Error ? error.message : "Falha ao carregar.", "error");
+    } finally {
+      setLoading(false);
+    }
+  }, [range, notify]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  const save = async () => {
+    try {
+      await api("save_appointment", {
+        title,
+        startsAt: new Date(startsAt).toISOString(),
+      });
+      notify("Reunião adicionada à agenda.");
+      setTitle("");
+      setStartsAt("");
+      setShowForm(false);
+      load();
+    } catch (error) {
+      notify(error instanceof Error ? error.message : "Não foi possível salvar.", "error");
+    }
+  };
+
+  return (
+    <div className="page-stack">
+      <section className="calendar-toolbar">
+        <div className="segmented-tabs four">
+          {[
+            ["today", "Hoje"],
+            ["day", "Dia"],
+            ["week", "Semana"],
+            ["month", "Mês"],
+          ].map(([key, label]) => (
+            <button
+              key={key}
+              className={view === key ? "active" : ""}
+              onClick={() => setView(key)}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+        <button className="primary-button small" onClick={() => setShowForm(!showForm)}>
+          + Reunião
+        </button>
+      </section>
+
+      {showForm ? (
+        <section className="compact-form-card">
+          <input
+            value={title}
+            onChange={(event) => setTitle(event.target.value)}
+            placeholder="Título da reunião"
+          />
+          <input
+            type="datetime-local"
+            value={startsAt}
+            onChange={(event) => setStartsAt(event.target.value)}
+          />
+          <button className="outline-button compact" onClick={save}>
+            Salvar na agenda
+          </button>
+        </section>
+      ) : null}
+
+      <section className="calendar-card">
+        <div className="calendar-heading">
+          <div>
+            <p className="eyebrow">AGENDA COMPARTILHADA</p>
+            <h2>
+              {new Intl.DateTimeFormat("pt-BR", {
+                month: "long",
+                year: "numeric",
+              }).format(new Date())}
+            </h2>
+          </div>
+          <span>{appointments.length} compromisso(s)</span>
+        </div>
+        {loading ? (
+          <LoadingBlock />
+        ) : appointments.length === 0 ? (
+          <EmptyState
+            icon="▦"
+            title="Nenhuma reunião neste período"
+            text="Use o botão + Reunião para criar o primeiro compromisso."
+          />
+        ) : (
+          <div className="appointment-list">
+            {appointments.map((appointment) => (
+              <article className="appointment-card" key={appointment.id}>
+                <div className="appointment-date">
+                  <strong>
+                    {new Date(appointment.starts_at)
+                      .toLocaleDateString("pt-BR", { day: "2-digit" })}
+                  </strong>
+                  <span>
+                    {new Date(appointment.starts_at)
+                      .toLocaleDateString("pt-BR", { month: "short" })
+                      .replace(".", "")}
+                  </span>
+                </div>
+                <div>
+                  <h3>{appointment.title}</h3>
+                  <p>
+                    {formatDate(appointment.starts_at)} ·{" "}
+                    {appointment.owner?.full_name || "Responsável"}
+                  </p>
+                  {appointment.contacts?.full_name ? (
+                    <small>Cliente: {appointment.contacts.full_name}</small>
+                  ) : null}
+                </div>
+                <span className={`status-pill ${appointment.status}`}>
+                  {appointment.status === "scheduled" ? "Agendada" : appointment.status}
+                </span>
+              </article>
+            ))}
+          </div>
+        )}
+      </section>
+    </div>
+  );
+}
+
+function NotificationsView({
+  notify,
+}: {
+  notify: (text: string, tone?: "success" | "error") => void;
+}) {
+  const [items, setItems] = useState<AnyRecord[]>([]);
+  const [loading, setLoading] = useState(true);
+  useEffect(() => {
+    api("notifications")
+      .then((data) => setItems(data || []))
+      .catch((error) => notify(error.message, "error"))
+      .finally(() => setLoading(false));
+  }, [notify]);
+
+  const categories = [
+    ["Retornos Programados", "↩", "Contatos que precisam de nova abordagem"],
+    ["Retornar após Áudio", "◖", "Áudios sem atualização há mais de 24 horas"],
+    ["Agenda dos Advogados", "▦", "Reuniões, contratos e agenda compartilhada"],
+    ["Sistema", "⚙", "Importações, sincronizações e atualizações"],
+    ["Saúde dos Chips", "◉", "Limites, restrições e possíveis bloqueios"],
+  ];
+
+  return loading ? (
+    <LoadingBlock />
+  ) : (
+    <div className="page-stack">
+      {categories.map(([title, icon, text]) => {
+        const matches = items.filter((item) =>
+          String(item.category || "").toLowerCase().includes(title.toLowerCase().split(" ")[0]),
+        );
+        return (
+          <section className="notification-section" key={title}>
+            <div className="notification-title">
+              <span>{icon}</span>
+              <div>
+                <h2>{title}</h2>
+                <p>{text}</p>
+              </div>
+              <b>{matches.length}</b>
+            </div>
+            {matches.length ? (
+              matches.slice(0, 3).map((item) => (
+                <article className="notification-row" key={item.id}>
+                  <span className="notification-dot" />
+                  <div>
+                    <strong>{item.title || title}</strong>
+                    <p>{item.body || item.message}</p>
+                    <small>{formatDate(item.created_at)}</small>
+                  </div>
+                </article>
+              ))
+            ) : (
+              <p className="quiet-row">Nada novo nesta categoria.</p>
+            )}
+          </section>
+        );
+      })}
+    </div>
+  );
+}
+
+function ReportsView({
+  notify,
+}: {
+  notify: (text: string, tone?: "success" | "error") => void;
+}) {
+  const [data, setData] = useState<AnyRecord | null>(null);
+  useEffect(() => {
+    api("reports")
+      .then(setData)
+      .catch((error) => notify(error.message, "error"));
+  }, [notify]);
+  if (!data) return <LoadingBlock label="Calculando os relatórios..." />;
+  const distribution = Object.entries(data.distribution || {}).sort(
+    (a: any, b: any) => b[1] - a[1],
+  );
+  const max = Math.max(1, ...distribution.map(([, value]: any) => value));
+  return (
+    <div className="page-stack">
+      <div className="segmented-tabs two">
+        <button className="active">Visão Geral</button>
+        <button>Meu Desempenho</button>
+      </div>
+      <section className="report-metrics">
+        {[
+          ["Contatos", data.total, "orange"],
+          ["Na fila", data.pending, "blue"],
+          ["Em recuperação", data.recovery, "red"],
+          ["Recuperados", data.recovered, "green"],
+          ["Agendamentos", data.appointments, "purple"],
+          ["Contratos", data.contracts, "gold"],
+        ].map(([label, value, tone]) => (
+          <article className={`report-metric ${tone}`} key={String(label)}>
+            <span>{label}</span>
+            <strong>{value}</strong>
+          </article>
+        ))}
+      </section>
+      <section className="chart-card">
+        <div className="chart-head">
+          <div>
+            <p className="eyebrow">DISTRIBUIÇÃO DE RESULTADOS</p>
+            <h2>Situação atual dos contatos</h2>
+          </div>
+          <select defaultValue="month">
+            <option value="day">Dia</option>
+            <option value="week">Semana</option>
+            <option value="month">Mês</option>
+          </select>
+        </div>
+        <div className="bar-list">
+          {distribution.slice(0, 10).map(([label, value]: any) => (
+            <div className="bar-row" key={label}>
+              <span>{label}</span>
+              <div>
+                <i style={{ width: `${Math.max(3, (value / max) * 100)}%` }} />
+              </div>
+              <strong>{value}</strong>
+            </div>
+          ))}
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function ChipsUsersView({
+  notify,
+}: {
+  notify: (text: string, tone?: "success" | "error") => void;
+}) {
+  const [tab, setTab] = useState<"chips" | "users">("chips");
+  const [chips, setChips] = useState<AnyRecord[]>([]);
+  const [users, setUsers] = useState<AnyRecord>({ profiles: [], invitations: [] });
+  const [showForm, setShowForm] = useState(false);
+  const [form, setForm] = useState<AnyRecord>({});
+
+  const load = useCallback(async () => {
+    try {
+      if (tab === "chips") setChips((await api("chips")) || []);
+      else setUsers((await api("users")) || { profiles: [], invitations: [] });
+    } catch (error) {
+      notify(error instanceof Error ? error.message : "Falha ao carregar.", "error");
+    }
+  }, [tab, notify]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  const save = async () => {
+    try {
+      if (tab === "chips") await api("save_chip", form);
+      else
+        await api("invite_user", {
+          fullName: form.fullName,
+          email: form.email,
+          role: form.role || "lawyer",
+          honorific: form.honorific || "Dr(a).",
+        });
+      notify(tab === "chips" ? "Chip cadastrado." : "Convite criado para o e-mail.");
+      setForm({});
+      setShowForm(false);
+      load();
+    } catch (error) {
+      notify(error instanceof Error ? error.message : "Não foi possível salvar.", "error");
+    }
+  };
+
+  return (
+    <div className="page-stack">
+      <section className="chips-users-head">
+        <div className="segmented-tabs two">
+          <button className={tab === "chips" ? "active" : ""} onClick={() => setTab("chips")}>
+            Chips
+          </button>
+          <button className={tab === "users" ? "active" : ""} onClick={() => setTab("users")}>
+            Usuários
+          </button>
+        </div>
+        <button className="primary-button small" onClick={() => setShowForm(!showForm)}>
+          + {tab === "chips" ? "Cadastrar chip" : "Convidar usuário"}
+        </button>
+      </section>
+
+      {showForm ? (
+        <section className="compact-form-card grid-form">
+          {tab === "chips" ? (
+            <>
+              <input
+                placeholder="Nome do chip"
+                value={form.name || ""}
+                onChange={(event) => setForm({ ...form, name: event.target.value })}
+              />
+              <input
+                placeholder="Número com DDD"
+                inputMode="tel"
+                value={form.number || ""}
+                onChange={(event) => setForm({ ...form, number: event.target.value })}
+              />
+              <input
+                placeholder="Operadora"
+                value={form.operator || ""}
+                onChange={(event) => setForm({ ...form, operator: event.target.value })}
+              />
+              <select
+                value={form.status || "active"}
+                onChange={(event) => setForm({ ...form, status: event.target.value })}
+              >
+                <option value="active">Ativo</option>
+                <option value="paused">Pausado</option>
+                <option value="restricted">Restrito</option>
+                <option value="blocked">Bloqueado</option>
+              </select>
+            </>
+          ) : (
+            <>
+              <input
+                placeholder="Nome completo"
+                value={form.fullName || ""}
+                onChange={(event) => setForm({ ...form, fullName: event.target.value })}
+              />
+              <input
+                placeholder="E-mail"
+                type="email"
+                value={form.email || ""}
+                onChange={(event) => setForm({ ...form, email: event.target.value })}
+              />
+              <select
+                value={form.role || "lawyer"}
+                onChange={(event) => setForm({ ...form, role: event.target.value })}
+              >
+                <option value="lawyer">Advogado</option>
+                <option value="admin">Administrador</option>
+              </select>
+            </>
+          )}
+          <button className="outline-button compact" onClick={save}>
+            Salvar
+          </button>
+        </section>
+      ) : null}
+
+      {tab === "chips" ? (
+        chips.length ? (
+          <section className="chip-grid">
+            {chips.map((chip) => (
+              <article className="chip-card" key={chip.id}>
+                <div className={`health-ring score-${Math.ceil((chip.health_score || 0) / 20)}`}>
+                  <strong>{chip.health_score || 0}%</strong>
+                  <span>saúde</span>
+                </div>
+                <div>
+                  <h3>{chip.name}</h3>
+                  <p>+{chip.number}</p>
+                  <small>{chip.operator || "Operadora não informada"}</small>
+                </div>
+                <span className={`status-pill ${chip.status}`}>{chip.status}</span>
+              </article>
+            ))}
+          </section>
+        ) : (
+          <EmptyState
+            icon="◉"
+            title="Nenhum chip cadastrado"
+            text="Cadastre o primeiro chip para acompanhar saúde, limites e histórico."
+          />
+        )
+      ) : (
+        <section className="user-list">
+          {(users.profiles || []).map((user: AnyRecord) => (
+            <article className="user-row" key={user.id}>
+              <div className="avatar">{firstWord(user.full_name).slice(0, 1)}</div>
+              <div>
+                <strong>{user.full_name}</strong>
+                <span>{user.email}</span>
+              </div>
+              <span className={`status-pill ${user.status}`}>
+                {user.role === "admin" ? "Administrador" : "Advogado"}
+              </span>
+            </article>
+          ))}
+          {(users.invitations || []).map((invite: AnyRecord) => (
+            <article className="user-row" key={invite.id}>
+              <div className="avatar pending">✉</div>
+              <div>
+                <strong>{invite.full_name}</strong>
+                <span>{invite.email}</span>
+              </div>
+              <span className="status-pill pending">Convite pendente</span>
+            </article>
+          ))}
+        </section>
+      )}
+    </div>
+  );
+}
+
+function ProfileView({
+  profile,
+  onSignOut,
+}: {
+  profile: AnyRecord;
+  onSignOut: () => void;
+}) {
+  return (
+    <div className="page-stack">
+      <section className="profile-card">
+        <div className="profile-avatar">{firstWord(profile.full_name).slice(0, 1)}</div>
+        <div>
+          <p className="eyebrow">MEU PERFIL</p>
+          <h2>{profile.full_name}</h2>
+          <p>{profile.email}</p>
+          <span className="status-pill active">
+            {profile.role === "admin" ? "Administradora" : "Advogado"}
+          </span>
+        </div>
+      </section>
+      <button className="outline-button full link-button" onClick={onSignOut}>
+        Sair do PROSPEC KR
+      </button>
+    </div>
+  );
+}
+
+export default function ProspecDashboard({ session }: { session: Session }) {
+  const [page, setPage] = useState<PageKey>("home");
+  const [bootstrap, setBootstrap] = useState<AnyRecord | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [toast, setToast] = useState<{ text: string; tone: "success" | "error" } | null>(
+    null,
+  );
+  const [fatal, setFatal] = useState("");
+
+  const notify = useCallback((text: string, tone: "success" | "error" = "success") => {
+    setToast({ text, tone });
+  }, []);
+
+  useEffect(() => {
+    api("bootstrap")
+      .then(setBootstrap)
+      .catch((error) => setFatal(error.message))
+      .finally(() => setLoading(false));
+  }, []);
+
+  if (loading) {
+    return (
+      <main className="splash-screen">
+        <div className="brand-mark">KR</div>
+        <h1>PROSPEC KR</h1>
+        <LoadingBlock label="Abrindo sua operação..." />
+      </main>
+    );
+  }
+
+  if (fatal || !bootstrap) {
+    return (
+      <main className="login-page">
+        <section className="login-card error-card">
+          <div className="brand-mark">KR</div>
+          <h1>Acesso ainda não liberado</h1>
+          <p>{fatal || "Não foi possível identificar seu perfil."}</p>
+          <p className="email-chip">{session.user.email}</p>
+          <button
+            className="outline-button full link-button"
+            onClick={() => supabase.auth.signOut()}
+          >
+            Entrar com outro e-mail
+          </button>
+        </section>
+      </main>
+    );
+  }
+
+  const role = bootstrap.profile?.role || "lawyer";
+  const nav = role === "admin" ? ADMIN_NAV : LAWYER_NAV;
+  const titles: Record<PageKey, [string, string]> = {
+    home: [
+      "Início",
+      `Olá, ${firstWord(
+        bootstrap.profile?.full_name ||
+          session.user.user_metadata?.full_name ||
+          session.user.email,
+      )}.`,
+    ],
+    notifications: ["Notificações", "Acompanhe tudo que precisa da sua atenção."],
+    agenda: ["Agenda", "Reuniões e compromissos da equipe."],
+    lists: ["Listas e Contatos", "Gerencie a operação e a Recuperação."],
+    templates: ["Modelos de Mensagens", "Crie suas bibliotecas de abordagem."],
+    reports: ["Relatórios", "Resultados, evolução e desempenho."],
+    "chips-users": ["Chips e Usuários", "Saúde dos chips, convites e permissões."],
+    profile: ["Meu Perfil", "Seus dados e acesso ao sistema."],
+  };
+
+  const go = (target: PageKey) => {
+    setPage(target);
+    setMenuOpen(false);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  return (
+    <div className="app-shell">
+      <Header
+        title={titles[page][0]}
+        subtitle={titles[page][1]}
+        onMenu={() => setMenuOpen(true)}
+        badge={bootstrap.counters?.notifications}
+      />
+
+      <aside className={`side-drawer ${menuOpen ? "open" : ""}`} aria-hidden={!menuOpen}>
+        <div className="drawer-head">
+          <div className="brand-mark small-mark">KR</div>
+          <div>
+            <strong>PROSPEC KR</strong>
+            <span>{bootstrap.profile?.full_name}</span>
+          </div>
+          <button className="icon-button" onClick={() => setMenuOpen(false)}>
+            ×
+          </button>
+        </div>
+        <nav>
+          {[
+            ...nav.filter(([key]) => key !== "profile"),
+            ["templates", "Modelos de Mensagens", "✎"] as [PageKey, string, string],
+            ["profile", "Meu Perfil", "○"] as [PageKey, string, string],
+          ]
+            .filter(
+              ([key], index, rows) =>
+                rows.findIndex(([candidate]) => candidate === key) === index &&
+                (role === "admin" || key !== "chips-users"),
+            )
+            .map(([key, label, icon]) => (
+              <button key={key} className={page === key ? "active" : ""} onClick={() => go(key)}>
+                <span>{icon}</span>
+                {label}
+              </button>
+            ))}
+          <button onClick={() => supabase.auth.signOut()}>
+            <span>↪</span>
+            Sair
+          </button>
+        </nav>
+      </aside>
+      {menuOpen ? <button className="drawer-backdrop" onClick={() => setMenuOpen(false)} /> : null}
+
+      <main className="app-content">
+        {page === "home" ? <HomeView bootstrap={bootstrap} notify={notify} /> : null}
+        {page === "notifications" ? <NotificationsView notify={notify} /> : null}
+        {page === "agenda" ? <AgendaView notify={notify} /> : null}
+        {page === "lists" ? <ListsView bootstrap={bootstrap} notify={notify} /> : null}
+        {page === "templates" ? <TemplatesView role={role} notify={notify} /> : null}
+        {page === "reports" ? <ReportsView notify={notify} /> : null}
+        {page === "chips-users" && role === "admin" ? (
+          <ChipsUsersView notify={notify} />
+        ) : null}
+        {page === "profile" ? (
+          <ProfileView
+            profile={bootstrap.profile}
+            onSignOut={() => supabase.auth.signOut()}
+          />
+        ) : null}
+      </main>
+
+      <nav className="bottom-nav" aria-label="Navegação principal">
+        {nav.map(([key, label, icon]) => (
+          <button key={key} className={page === key ? "active" : ""} onClick={() => go(key)}>
+            <span>{icon}</span>
+            <small>{label}</small>
+          </button>
+        ))}
+      </nav>
+
+      {toast ? (
+        <Toast
+          message={toast.text}
+          tone={toast.tone}
+          onClose={() => setToast(null)}
+        />
+      ) : null}
+    </div>
+  );
+}
