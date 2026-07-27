@@ -4,6 +4,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
+import * as XLSX from "xlsx";
 import { supabase } from "./supabase";
 
 type PageKey =
@@ -393,9 +394,11 @@ function HomeView({
 function ListsView({
   bootstrap,
   notify,
+  refreshBootstrap,
 }: {
   bootstrap: AnyRecord;
   notify: (text: string, tone?: "success" | "error") => void;
+  refreshBootstrap: () => Promise<void>;
 }) {
   const [tab, setTab] = useState<"lists" | "contacts" | "recovery">("lists");
   const [listId, setListId] = useState("");
@@ -405,6 +408,124 @@ function ListsView({
   const [recovery, setRecovery] = useState<AnyRecord[]>([]);
   const [loading, setLoading] = useState(false);
   const [phoneInputs, setPhoneInputs] = useState<Record<string, string>>({});
+  const [importPreview, setImportPreview] = useState<AnyRecord | null>(null);
+  const [importing, setImporting] = useState(false);
+  const [exporting, setExporting] = useState(false);
+
+  const textFrom = (row: AnyRecord, names: string[]) => {
+    const normalized = Object.entries(row).reduce<AnyRecord>((acc, [key, value]) => {
+      acc
+        [key.normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim().toLowerCase()] =
+        value;
+      return acc;
+    }, {});
+    for (const name of names) {
+      const value = normalized[name];
+      if (value !== undefined && value !== null && String(value).trim()) {
+        return String(value).trim();
+      }
+    }
+    return "";
+  };
+
+  const prepareSpreadsheet = async (file?: File) => {
+    if (!file) return;
+    try {
+      const workbook = XLSX.read(await file.arrayBuffer(), { type: "array" });
+      const lists = workbook.SheetNames.map((sheetName) => {
+        const rows = XLSX.utils.sheet_to_json<AnyRecord>(workbook.Sheets[sheetName], {
+          defval: "",
+          raw: false,
+        });
+        const contacts = rows
+          .map((row, rowIndex) => {
+            const fullName = textFrom(row, ["nome", "nome completo", "cliente"]);
+            const cpf = textFrom(row, ["cpf", "documento"]).replace(/\D/g, "");
+            const company = textFrom(row, [
+              "empresa",
+              "banco",
+              "instituicao",
+              "instituicao financeira",
+            ]);
+            const result = textFrom(row, ["resultado", "status", "tag", "situacao"]);
+            const phones = [
+              textFrom(row, ["telefone", "telefone 1", "celular", "whatsapp"]),
+              textFrom(row, ["telefone 2", "celular 2", "whatsapp 2"]),
+              textFrom(row, ["telefone 3", "celular 3", "whatsapp 3"]),
+            ].filter(Boolean);
+            if (!fullName && !cpf && !phones.length) return null;
+            return {
+              fullName: fullName || `Contato ${rowIndex + 2}`,
+              cpf,
+              company,
+              phones,
+              result,
+              sourceRow: rowIndex + 2,
+              sourcePayload: row,
+              recovery:
+                /sem\s*whats|sem\s*wpp|no\s*whatsapp/i.test(result) ||
+                /sem\s*whats|sem\s*wpp/i.test(sheetName),
+            };
+          })
+          .filter(Boolean);
+        return { name: sheetName.trim(), contacts };
+      }).filter((list) => list.contacts.length);
+      const total = lists.reduce((sum, list) => sum + list.contacts.length, 0);
+      const recovery = lists.reduce(
+        (sum, list) => sum + list.contacts.filter((contact: any) => contact.recovery).length,
+        0,
+      );
+      if (!total) throw new Error("Nenhum contato reconhecido na planilha.");
+      setImportPreview({ fileName: file.name, lists, total, recovery });
+    } catch (error) {
+      notify(
+        error instanceof Error ? error.message : "Não foi possível ler a planilha.",
+        "error",
+      );
+    }
+  };
+
+  const confirmImport = async () => {
+    if (!importPreview) return;
+    setImporting(true);
+    try {
+      const result = await api("import_spreadsheet", { lists: importPreview.lists });
+      notify(
+        `Importação concluída: ${result.created} novo(s), ${result.updated} atualizado(s) e ${result.recovery} em Recuperação.`,
+      );
+      setImportPreview(null);
+      await refreshBootstrap();
+    } catch (error) {
+      notify(error instanceof Error ? error.message : "Falha na importação.", "error");
+    } finally {
+      setImporting(false);
+    }
+  };
+
+  const exportSpreadsheet = async () => {
+    setExporting(true);
+    try {
+      const data = await api("export_spreadsheet");
+      const workbook = XLSX.utils.book_new();
+      for (const list of data.lists || []) {
+        const sheet = XLSX.utils.json_to_sheet(list.rows || []);
+        XLSX.utils.book_append_sheet(
+          workbook,
+          sheet,
+          String(list.name || "Lista").replace(/[\\/?*[\]:]/g, " ").slice(0, 31),
+        );
+      }
+      XLSX.writeFile(
+        workbook,
+        `PROSPEC_KR_atualizado_${new Date().toISOString().slice(0, 10)}.xlsx`,
+      );
+      notify("Planilha atualizada exportada.");
+    } catch (error) {
+      notify(error instanceof Error ? error.message : "Falha na exportação.", "error");
+    } finally {
+      setExporting(false);
+    }
+  };
 
   const loadContacts = useCallback(async () => {
     setLoading(true);
@@ -488,6 +609,57 @@ function ListsView({
       </div>
 
       {tab === "lists" ? (
+        <>
+        <section className="spreadsheet-actions">
+          <div>
+            <p className="eyebrow">PLANILHA DA OPERAÇÃO</p>
+            <h2>Importar ou exportar listas</h2>
+            <p>Cada aba vira uma lista. Antes de gravar, você confere o resumo.</p>
+          </div>
+          <div className="spreadsheet-buttons">
+            <label className="primary-button small file-button">
+              Importar planilha
+              <input
+                type="file"
+                accept=".xlsx,.xls,.csv"
+                onChange={(event) => prepareSpreadsheet(event.target.files?.[0])}
+              />
+            </label>
+            <button
+              className="outline-button compact"
+              onClick={exportSpreadsheet}
+              disabled={exporting}
+            >
+              {exporting ? "Exportando..." : "Exportar planilha atualizada"}
+            </button>
+          </div>
+        </section>
+        {importPreview ? (
+          <section className="import-preview">
+            <div>
+              <p className="eyebrow">CONFERÊNCIA ANTES DE IMPORTAR</p>
+              <h2>{importPreview.fileName}</h2>
+            </div>
+            <div className="metric-row import-metrics">
+              <div><strong>{importPreview.lists.length}</strong><span>listas</span></div>
+              <div><strong>{importPreview.total}</strong><span>contatos</span></div>
+              <div><strong>{importPreview.recovery}</strong><span>recuperação</span></div>
+            </div>
+            <div className="preview-list">
+              {importPreview.lists.map((list: AnyRecord) => (
+                <span key={list.name}>{list.name} · {list.contacts.length}</span>
+              ))}
+            </div>
+            <div className="preview-actions">
+              <button className="outline-button compact" onClick={() => setImportPreview(null)}>
+                Cancelar
+              </button>
+              <button className="primary-button small" onClick={confirmImport} disabled={importing}>
+                {importing ? "Importando..." : "Confirmar importação"}
+              </button>
+            </div>
+          </section>
+        ) : null}
         <section className="list-grid">
           {(bootstrap.lists || []).map((list: AnyRecord) => (
             <article className="list-card" key={list.id}>
@@ -523,6 +695,7 @@ function ListsView({
             </article>
           ))}
         </section>
+        </>
       ) : null}
 
       {tab === "contacts" ? (
@@ -1278,12 +1451,16 @@ export default function ProspecDashboard({ session }: { session: Session }) {
     setToast({ text, tone });
   }, []);
 
+  const refreshBootstrap = useCallback(async () => {
+    const data = await api("bootstrap");
+    setBootstrap(data);
+  }, []);
+
   useEffect(() => {
-    api("bootstrap")
-      .then(setBootstrap)
+    refreshBootstrap()
       .catch((error) => setFatal(error.message))
       .finally(() => setLoading(false));
-  }, []);
+  }, [refreshBootstrap]);
 
   if (loading) {
     return (
@@ -1389,7 +1566,13 @@ export default function ProspecDashboard({ session }: { session: Session }) {
         {page === "home" ? <HomeView bootstrap={bootstrap} notify={notify} /> : null}
         {page === "notifications" ? <NotificationsView notify={notify} /> : null}
         {page === "agenda" ? <AgendaView notify={notify} /> : null}
-        {page === "lists" ? <ListsView bootstrap={bootstrap} notify={notify} /> : null}
+        {page === "lists" ? (
+          <ListsView
+            bootstrap={bootstrap}
+            notify={notify}
+            refreshBootstrap={refreshBootstrap}
+          />
+        ) : null}
         {page === "templates" ? <TemplatesView role={role} notify={notify} /> : null}
         {page === "reports" ? <ReportsView notify={notify} /> : null}
         {page === "chips-users" && role === "admin" ? (
