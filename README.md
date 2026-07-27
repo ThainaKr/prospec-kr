@@ -2,9 +2,11 @@
 
 Aplicação operacional de prospecção jurídica, responsiva para celular e conectada ao banco protegido do Supabase.
 
+Produção: https://thainakr.github.io/prospec-kr/
+
 ## Acesso
 
-O acesso é feito por link mágico enviado ao e-mail previamente convidado pela Administradora. Não existem usuários ou dados de demonstração.
+O acesso é feito por link mágico enviado ao e-mail previamente convidado pela Administradora. Não existem usuários ou dados de demonstração. A interface é hospedada no GitHub Pages e os dados permanecem no Supabase protegido.
 
 ## Módulos
 

@@ -16,4 +16,5 @@ export const supabase = createClient(supabaseUrl, supabasePublishableKey, {
   },
 });
 
-export const productionUrl = "https://thainakr.github.io/prospec-kr/";
+export const productionUrl =
+  "https://thainakr.github.io/prospec-kr/";
