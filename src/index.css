@@ -259,6 +259,69 @@ button:disabled {
   width: 100%;
 }
 
+.spreadsheet-actions,
+.import-preview {
+  display: grid;
+  gap: 18px;
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  background: var(--surface);
+  padding: 20px;
+}
+
+.spreadsheet-actions h2,
+.import-preview h2 {
+  margin: 0;
+}
+
+.spreadsheet-actions p:not(.eyebrow) {
+  color: var(--muted);
+  margin: 8px 0 0;
+}
+
+.spreadsheet-buttons,
+.preview-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.file-button {
+  cursor: pointer;
+}
+
+.file-button input {
+  display: none;
+}
+
+.import-preview {
+  border-color: rgba(255, 106, 0, 0.45);
+  background: linear-gradient(145deg, rgba(255, 106, 0, 0.08), var(--surface));
+}
+
+.import-metrics {
+  grid-template-columns: repeat(3, 1fr);
+}
+
+.preview-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.preview-list span {
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: #0b0b0b;
+  color: #d5d5d5;
+  font-size: 12px;
+  padding: 7px 10px;
+}
+
+.preview-actions {
+  justify-content: flex-end;
+}
+
 .whatsapp-button {
   background: #1fb968;
   color: #03170d;
