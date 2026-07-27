@@ -690,6 +690,209 @@ async function recoverContact(profile: Json, payload: Json) {
   return { ok: true };
 }
 
+async function importSpreadsheet(profile: Json, payload: Json) {
+  requireAdmin(profile);
+  const lists = Array.isArray(payload.lists) ? payload.lists as Json[] : [];
+  if (!lists.length) throw new Error("A planilha não possui listas válidas.");
+  if (lists.length > 50) throw new Error("A planilha excede o limite de 50 abas.");
+
+  let created = 0;
+  let updated = 0;
+  let recoveryCount = 0;
+
+  for (const rawList of lists) {
+    const name = String(rawList.name ?? "").trim().slice(0, 120);
+    const contacts = Array.isArray(rawList.contacts)
+      ? rawList.contacts as Json[]
+      : [];
+    if (!name || !contacts.length) continue;
+
+    const { data: existingList, error: listLookupError } = await admin
+      .from("contact_lists")
+      .select("id")
+      .ilike("name", name)
+      .maybeSingle();
+    if (listLookupError) throw listLookupError;
+
+    let listId = existingList?.id;
+    if (!listId) {
+      const { data: insertedList, error: listInsertError } = await admin
+        .from("contact_lists")
+        .insert({
+          name,
+          active: true,
+          paused: false,
+          spreadsheet_tab: name,
+        })
+        .select("id")
+        .single();
+      if (listInsertError) throw listInsertError;
+      listId = insertedList.id;
+    }
+
+    const { data: lastQueue } = await admin
+      .from("contacts")
+      .select("queue_position")
+      .eq("list_id", listId)
+      .order("queue_position", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    let nextPosition = Number(lastQueue?.queue_position ?? 0) + 1;
+
+    for (const rawContact of contacts.slice(0, 5000)) {
+      const fullName = String(rawContact.fullName ?? "").trim().slice(0, 180);
+      const cpf = String(rawContact.cpf ?? "").replace(/\D/g, "").slice(0, 11);
+      const company = String(rawContact.company ?? "").trim().slice(0, 180);
+      const result = String(rawContact.result ?? "").trim().slice(0, 120);
+      const phones = Array.isArray(rawContact.phones)
+        ? [...new Set(rawContact.phones.map((phone) => cleanPhone(String(phone))).filter(Boolean))]
+        : [];
+      const isRecovery = rawContact.recovery === true;
+      if (!fullName && !cpf && !phones.length) continue;
+
+      let lookup = admin
+        .from("contacts")
+        .select("id")
+        .eq("list_id", listId);
+      if (cpf) lookup = lookup.eq("cpf", cpf);
+      else lookup = lookup.ilike("full_name", fullName).ilike("company", company || "");
+      const { data: existingContact, error: lookupError } = await lookup
+        .limit(1)
+        .maybeSingle();
+      if (lookupError) throw lookupError;
+
+      const contactData = {
+        list_id: listId,
+        full_name: fullName || "Contato sem nome",
+        first_name: fullName.split(/\s+/)[0] || "",
+        cpf: cpf || null,
+        company: company || null,
+        company_first_name: company.split(/\s+/)[0] || null,
+        current_result: result || (isRecovery ? "Sem WhatsApp" : null),
+        queue_status: isRecovery ? "recovery" : "waiting",
+        pending: true,
+        source_payload: rawContact.sourcePayload ?? {},
+        update_origin: "spreadsheet_upload",
+        updated_by_text: String(profile.email ?? ""),
+      };
+
+      let contactId = existingContact?.id;
+      if (contactId) {
+        const { error } = await admin
+          .from("contacts")
+          .update(contactData)
+          .eq("id", contactId);
+        if (error) throw error;
+        updated += 1;
+      } else {
+        const queuePosition = nextPosition++;
+        const { data, error } = await admin
+          .from("contacts")
+          .insert({ ...contactData, queue_position: queuePosition })
+          .select("id")
+          .single();
+        if (error) throw error;
+        contactId = data.id;
+        const { error: queueError } = await admin.from("operational_queue").insert({
+          list_id: listId,
+          contact_id: contactId,
+          position: queuePosition,
+          status: isRecovery ? "recovery" : "waiting",
+        });
+        if (queueError) throw queueError;
+        created += 1;
+      }
+
+      for (let phoneIndex = 0; phoneIndex < phones.length; phoneIndex += 1) {
+        const phone = phones[phoneIndex];
+        const { data: existingPhone } = await admin
+          .from("contact_phones")
+          .select("id")
+          .eq("contact_id", contactId)
+          .eq("phone_normalized", phone)
+          .maybeSingle();
+        if (!existingPhone) {
+          const { error } = await admin.from("contact_phones").insert({
+            contact_id: contactId,
+            phone_original: phone,
+            phone_normalized: phone,
+            status: isRecovery ? "no_whatsapp" : "unverified",
+            exhausted: isRecovery,
+            is_primary: phoneIndex === 0,
+            phone_order: phoneIndex + 1,
+          });
+          if (error) throw error;
+        }
+      }
+
+      if (isRecovery) {
+        recoveryCount += 1;
+        await admin.from("contact_recovery").upsert(
+          {
+            contact_id: contactId,
+            original_list_id: listId,
+            status: "waiting",
+            telegram_query: cpf ? `/cpf ${cpf}` : null,
+            updated_by: profile.id,
+          },
+          { onConflict: "contact_id" },
+        );
+      }
+    }
+  }
+
+  return { created, updated, recovery: recoveryCount };
+}
+
+async function exportSpreadsheet(profile: Json) {
+  requireAdmin(profile);
+  const { data: lists, error: listsError } = await admin
+    .from("contact_lists")
+    .select("id,name")
+    .eq("active", true)
+    .order("name");
+  if (listsError) throw listsError;
+
+  const result = [];
+  for (const list of lists ?? []) {
+    const { data: contacts, error } = await admin
+      .from("contacts")
+      .select("id,full_name,cpf,company,current_result,queue_status,recovered")
+      .eq("list_id", list.id)
+      .order("queue_position", { ascending: true, nullsFirst: false })
+      .limit(5000);
+    if (error) throw error;
+    const ids = (contacts ?? []).map((contact) => contact.id);
+    const { data: phones } = ids.length
+      ? await admin
+          .from("contact_phones")
+          .select("contact_id,phone_original,phone_normalized,phone_order")
+          .in("contact_id", ids)
+          .order("phone_order")
+      : { data: [] };
+    result.push({
+      name: list.name,
+      rows: (contacts ?? []).map((contact) => {
+        const contactPhones = (phones ?? []).filter(
+          (phone) => phone.contact_id === contact.id,
+        );
+        return {
+          Nome: contact.full_name,
+          CPF: contact.cpf || "",
+          Empresa: contact.company || "",
+          Telefone: contactPhones[0]?.phone_original || contactPhones[0]?.phone_normalized || "",
+          "Telefone 2": contactPhones[1]?.phone_original || contactPhones[1]?.phone_normalized || "",
+          "Telefone 3": contactPhones[2]?.phone_original || contactPhones[2]?.phone_normalized || "",
+          Resultado: contact.current_result || "",
+          Fila: contact.queue_status || "",
+          Recuperado: contact.recovered ? "Sim" : "Não",
+        };
+      }),
+    });
+  }
+  return { lists: result };
+}
+
 Deno.serve(async (request: Request) => {
   if (request.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
@@ -713,6 +916,8 @@ Deno.serve(async (request: Request) => {
       save_appointment: "can_view_agenda",
       notifications: "can_view_notifications",
       reports: "can_view_reports",
+      import_spreadsheet: "can_view_lists",
+      export_spreadsheet: "can_view_lists",
     };
     const permissionKey = permissionByAction[action];
     if (
@@ -801,6 +1006,12 @@ Deno.serve(async (request: Request) => {
         break;
       case "recover_contact":
         data = await recoverContact(profile, payload);
+        break;
+      case "import_spreadsheet":
+        data = await importSpreadsheet(profile, payload);
+        break;
+      case "export_spreadsheet":
+        data = await exportSpreadsheet(profile);
         break;
       default:
         return json({ error: "Ação não encontrada." }, 404);
