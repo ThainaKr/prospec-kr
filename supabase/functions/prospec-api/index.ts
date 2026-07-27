@@ -113,6 +113,17 @@ async function getLists() {
         ["eq", "list_id", list.id],
         ["eq", "queue_status", "recovery"],
       ]),
+      scheduled_count: await (async () => {
+        const { count, error: scheduledError } = await admin
+          .from("contacts")
+          .select("*", { count: "exact", head: true })
+          .eq("list_id", list.id)
+          .or(
+            "current_result.ilike.%agendou%,current_result.ilike.%agendamento%,current_result.ilike.%chamei para reunião%",
+          );
+        if (scheduledError) throw scheduledError;
+        return count ?? 0;
+      })(),
     })),
   );
 }
@@ -209,6 +220,7 @@ async function getHome(profile: Json, payload: Json) {
 async function listContacts(profile: Json, payload: Json) {
   const listId = String(payload.listId ?? "");
   const search = String(payload.search ?? "").trim();
+  const statusFilter = String(payload.statusFilter ?? "");
   const page = Math.max(0, Number(payload.page ?? 0));
   let query = admin
     .from("contacts")
@@ -220,6 +232,11 @@ async function listContacts(profile: Json, payload: Json) {
     .range(page * 50, page * 50 + 49);
   if (listId) query = query.eq("list_id", listId);
   if (profile.role !== "admin") query = query.eq("assigned_to", profile.id);
+  if (statusFilter === "scheduled") {
+    query = query.or(
+      "current_result.ilike.%agendou%,current_result.ilike.%agendamento%,current_result.ilike.%chamei para reunião%",
+    );
+  }
   if (search) {
     const safe = search.replace(/[%(),]/g, " ");
     query = query.or(
@@ -787,6 +804,12 @@ async function importSpreadsheet(profile: Json, payload: Json) {
         ? [...new Set(rawContact.phones.map((phone) => cleanPhone(String(phone))).filter(Boolean))]
         : [];
       const isRecovery = rawContact.recovery === true;
+      const isScheduled =
+        rawContact.scheduled === true ||
+        /agendou|agendament|chamei para reuni[aã]o/i.test(result);
+      const isFollowUp =
+        /retorn|sem resposta|vácuo|vacuo|mandei 1.*msg/i.test(result);
+      const isActionable = !result || isFollowUp;
       if (!fullName && !cpf && !phones.length) continue;
 
       let lookup = admin
@@ -808,8 +831,14 @@ async function importSpreadsheet(profile: Json, payload: Json) {
         company: company || null,
         company_first_name: company.split(/\s+/)[0] || null,
         current_result: result || (isRecovery ? "Sem WhatsApp" : null),
-        queue_status: isRecovery ? "recovery" : "waiting",
-        pending: true,
+        queue_status: isRecovery
+          ? "recovery"
+          : isScheduled
+            ? "scheduled"
+            : isActionable
+              ? "waiting"
+              : "completed",
+        pending: isActionable && !isRecovery,
         source_payload: rawContact.sourcePayload ?? {},
         update_origin: "spreadsheet_upload",
         updated_by_text: String(profile.email ?? ""),
