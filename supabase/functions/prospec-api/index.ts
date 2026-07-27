@@ -30,6 +30,10 @@ const json = (body: unknown, status = 200) =>
   });
 
 const cleanEmail = (value: string | null) => (value ?? "").trim().toLowerCase();
+const titleCaseFirst = (value: string | null | undefined) => {
+  const clean = String(value ?? "").trim().toLocaleLowerCase("pt-BR");
+  return clean ? clean.charAt(0).toLocaleUpperCase("pt-BR") + clean.slice(1) : "";
+};
 const cleanPhone = (value: string | null | undefined) => {
   const digits = String(value ?? "").replace(/\D/g, "");
   if (!digits) return "";
@@ -116,7 +120,9 @@ async function getLists() {
 async function getHome(profile: Json, payload: Json) {
   const listId = String(payload.listId ?? "");
   const messageType =
-    payload.messageType === "follow_up" ? "follow_up" : "first_message";
+    profile.role !== "admin"
+      ? "post_meeting_follow_up"
+      : payload.messageType === "follow_up" ? "follow_up" : "first_message";
   if (!listId) return { queue: [], template: null };
 
   let queueQuery = admin
@@ -129,43 +135,22 @@ async function getHome(profile: Json, payload: Json) {
     .neq("queue_status", "recovery")
     .neq("queue_status", "completed")
     .order("queue_position", { ascending: true, nullsFirst: false })
-    .limit(5);
-  if (profile.role !== "admin") {
+    .limit(1000);
+  if (messageType === "first_message") {
+    queueQuery = queueQuery.is("current_result", null);
+  } else {
     queueQuery = queueQuery.or(
-      `assigned_to.eq.${profile.id},assigned_to.is.null`,
+      "current_result.ilike.%retorn%,current_result.ilike.%sem resposta%,current_result.ilike.%vácuo%,current_result.ilike.%vacuo%,current_result.ilike.%mandei 1%msg%",
     );
+  }
+  if (profile.role !== "admin") {
+    queueQuery = queueQuery.eq("assigned_to", profile.id);
   }
   const { data: contacts, error } = await queueQuery;
   if (error) throw error;
 
-  if (profile.role !== "admin") {
-    const newlyAssigned = (contacts ?? [])
-      .filter((contact) => !contact.assigned_to)
-      .map((contact) => contact.id);
-    if (newlyAssigned.length) {
-      await Promise.all([
-        admin
-          .from("contacts")
-          .update({
-            assigned_to: profile.id,
-            queue_status: "in_progress",
-            last_activity_at: new Date().toISOString(),
-          })
-          .in("id", newlyAssigned),
-        admin
-          .from("operational_queue")
-          .update({
-            reserved_by: profile.id,
-            reserved_at: new Date().toISOString(),
-            status: "in_progress",
-            updated_at: new Date().toISOString(),
-          })
-          .in("contact_id", newlyAssigned),
-      ]);
-    }
-  }
-
-  const ids = (contacts ?? []).map((contact) => contact.id);
+  const visibleContacts = (contacts ?? []).slice(0, 50);
+  const ids = visibleContacts.map((contact) => contact.id);
   const { data: phones } = ids.length
     ? await admin
         .from("contact_phones")
@@ -188,22 +173,36 @@ async function getHome(profile: Json, payload: Json) {
     .order("position")
     .limit(300);
 
+  const { data: chips } = await admin
+    .from("chips")
+    .select("id,name,number,operator,status,health_score")
+    .eq("status", "active")
+    .eq("auto_suspended", false)
+    .order("created_at");
+
   return {
-    queue: (contacts ?? []).map((contact, index) => {
+    queue: visibleContacts.map((contact) => {
+      const sequence = Math.max(0, Number(contact.queue_position ?? 1) - 1);
       const contactPhones = (phones ?? []).filter(
         (phone) => phone.contact_id === contact.id,
       );
       const template =
-        templates && templates.length
-          ? templates[index % templates.length]
-          : null;
+        templates && templates.length ? templates[sequence % templates.length] : null;
+      const chip = chips && chips.length ? chips[sequence % chips.length] : null;
       return {
         ...contact,
+        full_name: titleCaseFirst(contact.full_name),
+        first_name: titleCaseFirst(contact.first_name || String(contact.full_name || "").split(/\s+/)[0]),
+        company: titleCaseFirst(contact.company),
+        company_first_name: titleCaseFirst(contact.company_first_name || String(contact.company || "").split(/\s+/)[0]),
         phones: contactPhones,
         template,
+        chip,
       };
     }),
+    queue_count: contacts?.length ?? 0,
     template_count: templates?.length ?? 0,
+    chip_count: chips?.length ?? 0,
   };
 }
 
@@ -336,6 +335,46 @@ async function saveResult(profile: Json, payload: Json) {
       .update({ status: "recovery", updated_at: new Date().toISOString() })
       .eq("contact_id", contactId);
   }
+  return { ok: true };
+}
+
+
+async function saveWorkState(profile: Json, payload: Json) {
+  const listId = payload.listId ? String(payload.listId) : null;
+  const messageType = payload.messageType === "follow_up" ? "follow_up" : payload.messageType === "first_message" ? "first_message" : null;
+  const { error } = await admin.from("user_work_state").upsert({
+    user_id: profile.id,
+    selected_list_id: listId,
+    message_type: messageType,
+    updated_at: new Date().toISOString(),
+  }, { onConflict: "user_id" });
+  if (error) throw error;
+  return { ok: true };
+}
+
+async function markInProgress(profile: Json, payload: Json) {
+  const contactId = String(payload.contactId ?? "");
+  if (!contactId) throw new Error("Contato inválido.");
+  const { data: contact, error: contactError } = await admin
+    .from("contacts").select("assigned_to").eq("id", contactId).single();
+  if (contactError) throw contactError;
+  if (profile.role !== "admin" && contact.assigned_to !== profile.id) {
+    throw new Error("Este contato não está atribuído ao seu perfil.");
+  }
+  const now = new Date().toISOString();
+  await Promise.all([
+    admin.from("contacts").update({ queue_status: "in_progress", last_activity_at: now }).eq("id", contactId),
+    admin.from("operational_queue").update({ status: "in_progress", reserved_by: profile.id, reserved_at: now, updated_at: now }).eq("contact_id", contactId),
+    admin.from("contact_events").insert({
+      contact_id: contactId,
+      actor_id: profile.id,
+      event_type: "whatsapp_opened",
+      chip_id: payload.chipId || null,
+      template_id: payload.templateId || null,
+      phone_id: payload.phoneId || null,
+      source_module: "home",
+    }),
+  ]);
   return { ok: true };
 }
 
@@ -918,6 +957,8 @@ Deno.serve(async (request: Request) => {
       reports: "can_view_reports",
       import_spreadsheet: "can_view_lists",
       export_spreadsheet: "can_view_lists",
+      save_work_state: "can_view_lists",
+      mark_in_progress: "can_view_lists",
     };
     const permissionKey = permissionByAction[action];
     if (
@@ -945,6 +986,7 @@ Deno.serve(async (request: Request) => {
           profile,
           permissions,
           lists,
+          work_state: (await admin.from("user_work_state").select("*").eq("user_id", profile.id).maybeSingle()).data,
           counters: {
             contacts: await countRows("contacts", contactFilters),
             recovery: recovery.length,
@@ -970,6 +1012,12 @@ Deno.serve(async (request: Request) => {
         break;
       case "record_result":
         data = await saveResult(profile, payload);
+        break;
+      case "save_work_state":
+        data = await saveWorkState(profile, payload);
+        break;
+      case "mark_in_progress":
+        data = await markInProgress(profile, payload);
         break;
       case "templates":
         data = await getTemplates(profile, payload);
