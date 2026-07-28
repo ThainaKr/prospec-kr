@@ -113,17 +113,6 @@ async function getLists() {
         ["eq", "list_id", list.id],
         ["eq", "queue_status", "recovery"],
       ]),
-      scheduled_count: await (async () => {
-        const { count, error: scheduledError } = await admin
-          .from("contacts")
-          .select("*", { count: "exact", head: true })
-          .eq("list_id", list.id)
-          .or(
-            "current_result.ilike.%agendou%,current_result.ilike.%agendamento%,current_result.ilike.%chamei para reunião%",
-          );
-        if (scheduledError) throw scheduledError;
-        return count ?? 0;
-      })(),
     })),
   );
 }
@@ -186,7 +175,7 @@ async function getHome(profile: Json, payload: Json) {
 
   const { data: chips } = await admin
     .from("chips")
-    .select("id,name,number,operator,status,health_score")
+    .select("id,name,number,operator,status,health_score,opening_method,app_package,app_component,app_label,browser_name,browser_package,web_url_template")
     .eq("status", "active")
     .eq("auto_suspended", false)
     .order("created_at");
@@ -220,7 +209,6 @@ async function getHome(profile: Json, payload: Json) {
 async function listContacts(profile: Json, payload: Json) {
   const listId = String(payload.listId ?? "");
   const search = String(payload.search ?? "").trim();
-  const statusFilter = String(payload.statusFilter ?? "");
   const page = Math.max(0, Number(payload.page ?? 0));
   let query = admin
     .from("contacts")
@@ -232,11 +220,6 @@ async function listContacts(profile: Json, payload: Json) {
     .range(page * 50, page * 50 + 49);
   if (listId) query = query.eq("list_id", listId);
   if (profile.role !== "admin") query = query.eq("assigned_to", profile.id);
-  if (statusFilter === "scheduled") {
-    query = query.or(
-      "current_result.ilike.%agendou%,current_result.ilike.%agendamento%,current_result.ilike.%chamei para reunião%",
-    );
-  }
   if (search) {
     const safe = search.replace(/[%(),]/g, " ");
     query = query.or(
@@ -371,7 +354,18 @@ async function saveWorkState(profile: Json, payload: Json) {
 
 async function markInProgress(profile: Json, payload: Json) {
   const contactId = String(payload.contactId ?? "");
+  const chipId = String(payload.chipId ?? "");
   if (!contactId) throw new Error("Contato inválido.");
+  if (!chipId) throw new Error("Nenhum chip ativo foi atribuído a este contato.");
+  const { data: chip, error: chipError } = await admin
+    .from("chips")
+    .select("id,status,auto_suspended")
+    .eq("id", chipId)
+    .maybeSingle();
+  if (chipError) throw chipError;
+  if (!chip || chip.status !== "active" || chip.auto_suspended) {
+    throw new Error("Este chip saiu da distribuição. Atualize a fila para receber outro chip ativo.");
+  }
   const { data: contact, error: contactError } = await admin
     .from("contacts").select("assigned_to").eq("id", contactId).single();
   if (contactError) throw contactError;
@@ -386,7 +380,7 @@ async function markInProgress(profile: Json, payload: Json) {
       contact_id: contactId,
       actor_id: profile.id,
       event_type: "whatsapp_opened",
-      chip_id: payload.chipId || null,
+      chip_id: chipId,
       template_id: payload.templateId || null,
       phone_id: payload.phoneId || null,
       source_module: "home",
@@ -546,7 +540,26 @@ async function saveChip(profile: Json, payload: Json) {
     operator: payload.operator || null,
     status: payload.status || "active",
     activated_at: payload.activatedAt || new Date().toISOString(),
+    opening_method: payload.openingMethod || "app",
+    app_package: payload.appPackage || null,
+    app_component: payload.appComponent || null,
+    app_label: payload.appLabel || null,
+    browser_name: payload.browserName || null,
+    browser_package: payload.browserPackage || null,
+    web_url_template:
+      payload.openingMethod === "web"
+        ? payload.webUrlTemplate || "https://web.whatsapp.com/send?phone={PHONE}"
+        : null,
   };
+  if (data.opening_method === "web" && !data.browser_name) {
+    throw new Error("Selecione o navegador usado por este WhatsApp Web.");
+  }
+  if (data.opening_method === "web" && !data.web_url_template?.includes("{PHONE}")) {
+    throw new Error("O link do WhatsApp Web precisa conter {PHONE}.");
+  }
+  if (payload.openingMethod === "app" && !data.app_package) {
+    throw new Error("Informe o package do aplicativo WhatsApp.");
+  }
   const query = payload.id
     ? admin.from("chips").update(data).eq("id", String(payload.id))
     : admin.from("chips").insert(data);
@@ -804,12 +817,6 @@ async function importSpreadsheet(profile: Json, payload: Json) {
         ? [...new Set(rawContact.phones.map((phone) => cleanPhone(String(phone))).filter(Boolean))]
         : [];
       const isRecovery = rawContact.recovery === true;
-      const isScheduled =
-        rawContact.scheduled === true ||
-        /agendou|agendament|chamei para reuni[aã]o/i.test(result);
-      const isFollowUp =
-        /retorn|sem resposta|vácuo|vacuo|mandei 1.*msg/i.test(result);
-      const isActionable = !result || isFollowUp;
       if (!fullName && !cpf && !phones.length) continue;
 
       let lookup = admin
@@ -831,14 +838,8 @@ async function importSpreadsheet(profile: Json, payload: Json) {
         company: company || null,
         company_first_name: company.split(/\s+/)[0] || null,
         current_result: result || (isRecovery ? "Sem WhatsApp" : null),
-        queue_status: isRecovery
-          ? "recovery"
-          : isScheduled
-            ? "scheduled"
-            : isActionable
-              ? "waiting"
-              : "completed",
-        pending: isActionable && !isRecovery,
+        queue_status: isRecovery ? "recovery" : "waiting",
+        pending: true,
         source_payload: rawContact.sourcePayload ?? {},
         update_origin: "spreadsheet_upload",
         updated_by_text: String(profile.email ?? ""),
