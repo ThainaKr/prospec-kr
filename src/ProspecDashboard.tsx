@@ -6,6 +6,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
 import * as XLSX from "xlsx";
 import { supabase } from "./supabase";
+import { buildWhatsAppOpeningUrl, openingMethodLabel } from "./whatsappOpening";
 
 type PageKey =
   | "home"
@@ -113,19 +114,6 @@ function normalizePhone(value?: string) {
   const digits = String(value || "").replace(/\D/g, "");
   if (!digits) return "";
   return digits.startsWith("55") ? digits : `55${digits}`;
-}
-
-type WhatsAppTarget = "ask" | "normal" | "business";
-
-function buildWhatsAppHref(phone: string, text: string, target: WhatsAppTarget) {
-  const query = `phone=${encodeURIComponent(phone)}${text ? `&text=${encodeURIComponent(text)}` : ""}`;
-  if (target === "business") {
-    return `intent://send?${query}#Intent;scheme=whatsapp;package=com.whatsapp.w4b;end`;
-  }
-  if (target === "normal") {
-    return `intent://send?${query}#Intent;scheme=whatsapp;package=com.whatsapp;end`;
-  }
-  return `https://wa.me/${phone}${text ? `?text=${encodeURIComponent(text)}` : ""}`;
 }
 
 function substituteTemplate(body: string, contact: AnyRecord) {
@@ -238,9 +226,6 @@ function HomeView({
   const [chipCount, setChipCount] = useState(0);
   const [results, setResults] = useState<Record<string, string>>({});
   const [inProgress, setInProgress] = useState<Record<string, boolean>>({});
-  const [whatsAppTarget, setWhatsAppTarget] = useState<WhatsAppTarget>(
-    () => (localStorage.getItem("prospec-whatsapp-target") as WhatsAppTarget) || "ask",
-  );
 
   const loadQueue = useCallback(async () => {
     if (!listId || !messageType) {
@@ -289,16 +274,22 @@ function HomeView({
       notify("Este contato não possui telefone válido.", "error");
       return;
     }
+    if (!contact.chip?.id || contact.chip.status !== "active") {
+      notify("Nenhum chip ativo está disponível para este contato.", "error");
+      return;
+    }
     const text = contact.template?.body
       ? substituteTemplate(contact.template.body, contact)
       : "";
-    const href = buildWhatsAppHref(
-      normalizePhone(phone.phone_normalized || phone.phone_original),
+    const href = buildWhatsAppOpeningUrl(
+      contact.chip,
+      phone.phone_normalized || phone.phone_original,
       text,
-      whatsAppTarget,
     );
-    const popup = window.open(href, "_blank", "noopener,noreferrer");
-    setInProgress((current) => ({ ...current, [contact.id]: true }));
+    if (!href) {
+      notify(`Revise o método de abertura cadastrado para o chip +${contact.chip.number}.`, "error");
+      return;
+    }
     try {
       await api("mark_in_progress", {
         contactId: contact.id,
@@ -306,8 +297,9 @@ function HomeView({
         templateId: contact.template?.id,
         chipId: contact.chip?.id,
       });
+      setInProgress((current) => ({ ...current, [contact.id]: true }));
+      window.location.href = href;
     } catch (error) {
-      if (!popup) notify("Permita a abertura do WhatsApp no navegador.", "error");
       notify(error instanceof Error ? error.message : "Não foi possível marcar em andamento.", "error");
     }
   };
@@ -378,21 +370,6 @@ function HomeView({
             </button>
           </div>
         </div>
-        <label>
-          <span>3. Onde abrir o WhatsApp</span>
-          <select
-            value={whatsAppTarget}
-            onChange={(event) => {
-              const next = event.target.value as WhatsAppTarget;
-              setWhatsAppTarget(next);
-              localStorage.setItem("prospec-whatsapp-target", next);
-            }}
-          >
-            <option value="ask">Perguntar / usar escolha do celular</option>
-            <option value="normal">WhatsApp normal</option>
-            <option value="business">WhatsApp Business</option>
-          </select>
-        </label>
         {messageType && listId ? (
           <p className="helper-text">
             {queueCount} contato(s) nesta fila · {templateCount} modelo(s) · {chipCount} chip(s) ativo(s).
@@ -482,7 +459,6 @@ function ListsView({
   const [tab, setTab] = useState<"lists" | "contacts" | "recovery">("lists");
   const [listId, setListId] = useState("");
   const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState<"" | "scheduled">("");
   const [contacts, setContacts] = useState<AnyRecord[]>([]);
   const [contactCount, setContactCount] = useState(0);
   const [recovery, setRecovery] = useState<AnyRecord[]>([]);
@@ -527,18 +503,11 @@ function ListsView({
               "instituicao",
               "instituicao financeira",
             ]);
-            const result = textFrom(row, [
-              "resultado",
-              "resultado do contato",
-              "status",
-              "tag",
-              "situacao",
-              "situação",
-            ]);
+            const result = textFrom(row, ["resultado", "status", "tag", "situacao"]);
             const phones = [
-              textFrom(row, ["telefone", "telefone 1", "tel1", "celular", "whatsapp"]),
-              textFrom(row, ["telefone 2", "tel2", "celular 2", "whatsapp 2"]),
-              textFrom(row, ["telefone 3", "tel3", "celular 3", "whatsapp 3"]),
+              textFrom(row, ["telefone", "telefone 1", "celular", "whatsapp"]),
+              textFrom(row, ["telefone 2", "celular 2", "whatsapp 2"]),
+              textFrom(row, ["telefone 3", "celular 3", "whatsapp 3"]),
             ].filter(Boolean);
             if (!fullName && !cpf && !phones.length) return null;
             return {
@@ -550,12 +519,16 @@ function ListsView({
               sourceRow: rowIndex + 2,
               sourcePayload: row,
               recovery:
-                /sem\s*what+s?a?p|sem\s*wpp|no\s*whatsapp/i.test(result) ||
+                /sem\s*whats|sem\s*wpp|no\s*whatsapp/i.test(result) ||
                 /sem\s*whats|sem\s*wpp/i.test(sheetName),
-              scheduled: /agendou|agendament|chamei para reuni[aã]o/i.test(result),
             };
           })
-          .filter(Boolean);
+          .filter(Boolean)
+          .filter((contact: any) => {
+            if (contact.recovery) return true;
+            const result = String(contact.result || "").trim();
+            return !result || /retorn|sem resposta|vácuo|vacuo|mandei 1.*msg/i.test(result);
+          });
         return { name: sheetName.trim(), contacts };
       }).filter((list) => list.contacts.length);
       const total = lists.reduce((sum, list) => sum + list.contacts.length, 0);
@@ -563,12 +536,8 @@ function ListsView({
         (sum, list) => sum + list.contacts.filter((contact: any) => contact.recovery).length,
         0,
       );
-      const scheduled = lists.reduce(
-        (sum, list) => sum + list.contacts.filter((contact: any) => contact.scheduled).length,
-        0,
-      );
       if (!total) throw new Error("Nenhum contato reconhecido na planilha.");
-      setImportPreview({ fileName: file.name, lists, total, recovery, scheduled });
+      setImportPreview({ fileName: file.name, lists, total, recovery });
     } catch (error) {
       notify(
         error instanceof Error ? error.message : "Não foi possível ler a planilha.",
@@ -622,7 +591,7 @@ function ListsView({
   const loadContacts = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await api("contacts", { listId, search, statusFilter });
+      const data = await api("contacts", { listId, search });
       setContacts(data.contacts || []);
       setContactCount(data.count || 0);
     } catch (error) {
@@ -630,7 +599,7 @@ function ListsView({
     } finally {
       setLoading(false);
     }
-  }, [listId, search, statusFilter, notify]);
+  }, [listId, search, notify]);
 
   const loadRecovery = useCallback(async () => {
     setLoading(true);
@@ -736,7 +705,6 @@ function ListsView({
               <div><strong>{importPreview.lists.length}</strong><span>listas</span></div>
               <div><strong>{importPreview.total}</strong><span>contatos</span></div>
               <div><strong>{importPreview.recovery}</strong><span>recuperação</span></div>
-              <div><strong>{importPreview.scheduled}</strong><span>agendados</span></div>
             </div>
             <div className="preview-list">
               {importPreview.lists.map((list: AnyRecord) => (
@@ -775,10 +743,6 @@ function ListsView({
                   <strong>{list.recovery_count}</strong>
                   <span>recuperação</span>
                 </div>
-                <div>
-                  <strong>{list.scheduled_count || 0}</strong>
-                  <span>agendados</span>
-                </div>
               </div>
               <button
                 className="outline-button full"
@@ -805,13 +769,6 @@ function ListsView({
                   {list.name}
                 </option>
               ))}
-            </select>
-            <select
-              value={statusFilter}
-              onChange={(event) => setStatusFilter(event.target.value as "" | "scheduled")}
-            >
-              <option value="">Todos os contatos</option>
-              <option value="scheduled">Agendados da planilha</option>
             </select>
             <input
               value={search}
@@ -1353,6 +1310,30 @@ function ChipsUsersView({
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState<AnyRecord>({});
 
+  const startChipForm = (chip?: AnyRecord) => {
+    setForm(
+      chip
+        ? {
+            ...chip,
+            activatedAt: chip.activated_at,
+            openingMethod: chip.opening_method || "app",
+            appPackage: chip.app_package || "",
+            appComponent: chip.app_component || "",
+            appLabel: chip.app_label || "",
+            browserName: chip.browser_name || "",
+            browserPackage: chip.browser_package || "",
+            webUrlTemplate:
+              chip.web_url_template || "https://web.whatsapp.com/send?phone={PHONE}",
+          }
+        : {
+            status: "active",
+            openingMethod: "app",
+            webUrlTemplate: "https://web.whatsapp.com/send?phone={PHONE}",
+          },
+    );
+    setShowForm(true);
+  };
+
   const load = useCallback(async () => {
     try {
       if (tab === "chips") setChips((await api("chips")) || []);
@@ -1376,7 +1357,7 @@ function ChipsUsersView({
           role: form.role || "lawyer",
           honorific: form.honorific || "Dr(a).",
         });
-      notify(tab === "chips" ? "Chip cadastrado." : "Convite criado para o e-mail.");
+      notify(tab === "chips" ? (form.id ? "Chip atualizado." : "Chip cadastrado.") : "Convite criado para o e-mail.");
       setForm({});
       setShowForm(false);
       load();
@@ -1396,7 +1377,7 @@ function ChipsUsersView({
             Usuários
           </button>
         </div>
-        <button className="primary-button small" onClick={() => setShowForm(!showForm)}>
+        <button className="primary-button small" onClick={() => (showForm ? setShowForm(false) : startChipForm())}>
           + {tab === "chips" ? "Cadastrar chip" : "Convidar usuário"}
         </button>
       </section>
@@ -1430,6 +1411,57 @@ function ChipsUsersView({
                 <option value="restricted">Restrito</option>
                 <option value="blocked">Bloqueado</option>
               </select>
+              <select
+                value={form.openingMethod || form.opening_method || "app"}
+                onChange={(event) => setForm({ ...form, openingMethod: event.target.value })}
+              >
+                <option value="app">Aplicativo</option>
+                <option value="web">WhatsApp Web</option>
+              </select>
+              {(form.openingMethod || form.opening_method || "app") === "app" ? (
+                <>
+                  <input
+                    placeholder="Identificação do aplicativo"
+                    value={form.appLabel || form.app_label || ""}
+                    onChange={(event) => setForm({ ...form, appLabel: event.target.value })}
+                  />
+                  <input
+                    placeholder="Package (ex.: com.whatsapp)"
+                    value={form.appPackage || form.app_package || ""}
+                    onChange={(event) => setForm({ ...form, appPackage: event.target.value })}
+                  />
+                  <input
+                    placeholder="Component (opcional)"
+                    value={form.appComponent || form.app_component || ""}
+                    onChange={(event) => setForm({ ...form, appComponent: event.target.value })}
+                  />
+                </>
+              ) : (
+                <>
+                  <select
+                    value={form.browserName || form.browser_name || ""}
+                    onChange={(event) => setForm({ ...form, browserName: event.target.value })}
+                  >
+                    <option value="">Selecione o navegador</option>
+                    <option value="Firefox">Firefox</option>
+                    <option value="Kiwi">Kiwi Browser</option>
+                    <option value="Brave">Brave</option>
+                    <option value="Chrome">Chrome</option>
+                    <option value="Edge">Edge</option>
+                    <option value="Outro">Outro</option>
+                  </select>
+                  <input
+                    placeholder="Package do navegador (opcional)"
+                    value={form.browserPackage || form.browser_package || ""}
+                    onChange={(event) => setForm({ ...form, browserPackage: event.target.value })}
+                  />
+                  <input
+                    placeholder="Link padrão com {PHONE}"
+                    value={form.webUrlTemplate || form.web_url_template || ""}
+                    onChange={(event) => setForm({ ...form, webUrlTemplate: event.target.value })}
+                  />
+                </>
+              )}
             </>
           ) : (
             <>
@@ -1472,8 +1504,12 @@ function ChipsUsersView({
                   <h3>{chip.name}</h3>
                   <p>+{chip.number}</p>
                   <small>{chip.operator || "Operadora não informada"}</small>
+                  <small>{openingMethodLabel(chip)}</small>
                 </div>
                 <span className={`status-pill ${chip.status}`}>{chip.status}</span>
+                <button className="outline-button compact" onClick={() => startChipForm(chip)}>
+                  Editar
+                </button>
               </article>
             ))}
           </section>
