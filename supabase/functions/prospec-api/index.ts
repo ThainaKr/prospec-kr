@@ -493,11 +493,30 @@ async function saveAppointment(profile: Json, payload: Json) {
   const endsAt = String(
     payload.endsAt || new Date(new Date(startsAt).getTime() + 3600000).toISOString(),
   );
+  const requestedOwnerId = payload.ownerId ? String(payload.ownerId) : String(profile.id);
+  if (profile.role !== "admin" && requestedOwnerId !== profile.id) {
+    throw new Error("Você só pode criar compromissos na sua própria agenda.");
+  }
+  if (payload.id) {
+    const { data: existing, error: existingError } = await admin
+      .from("appointments")
+      .select("owner_id,support_lawyer_id")
+      .eq("id", String(payload.id))
+      .single();
+    if (existingError) throw existingError;
+    if (
+      profile.role !== "admin" &&
+      existing.owner_id !== profile.id &&
+      existing.support_lawyer_id !== profile.id
+    ) {
+      throw new Error("Você não pode alterar este compromisso.");
+    }
+  }
   const data = {
     title,
     starts_at: startsAt,
     ends_at: endsAt,
-    owner_id: payload.ownerId || profile.id,
+    owner_id: requestedOwnerId,
     created_by: profile.id,
     contact_id: payload.contactId || null,
     support_lawyer_id: payload.supportLawyerId || null,
@@ -618,7 +637,61 @@ async function inviteUser(profile: Json, payload: Json) {
     });
     if (error) throw error;
   }
-  return { ok: true, email };
+  const redirectTo =
+    Deno.env.get("APP_URL") ?? "https://thainakr.github.io/prospec-kr/";
+  const { error: inviteError } = await admin.auth.admin.inviteUserByEmail(email, {
+    redirectTo,
+    data: { full_name: fullName, role, honorific: payload.honorific || null },
+  });
+  if (inviteError && !/already.*registered|already.*been registered/i.test(inviteError.message)) {
+    throw new Error(`O convite foi salvo, mas o e-mail não pôde ser enviado: ${inviteError.message}`);
+  }
+  return { ok: true, email, email_sent: !inviteError };
+}
+
+async function updateUser(profile: Json, payload: Json) {
+  requireAdmin(profile);
+  const userId = String(payload.userId ?? "");
+  if (!userId) throw new Error("Usuário inválido.");
+  const status = ["active", "pending", "blocked"].includes(String(payload.status))
+    ? String(payload.status)
+    : "active";
+  const role = payload.role === "admin" ? "admin" : "lawyer";
+  const active = status === "active";
+  const { error: profileError } = await admin
+    .from("profiles")
+    .update({
+      role,
+      status,
+      active,
+      blocked_at: status === "blocked" ? new Date().toISOString() : null,
+    })
+    .eq("id", userId);
+  if (profileError) throw profileError;
+
+  const allowedPermissionKeys = [
+    "can_send", "can_view_home", "can_view_agenda", "can_view_contacts",
+    "can_view_recovery", "can_view_reports_overview",
+    "can_view_reports_my_performance", "can_manage_chips_users",
+    "can_view_settings", "can_view_message_templates", "can_view_profile",
+    "can_manage_recovery", "can_manage_lists", "can_manage_contacts",
+    "can_manage_templates", "can_manage_reports", "can_manage_users",
+    "can_manage_chips", "can_view_notifications", "can_view_reports",
+    "can_view_lists", "can_manage_shared_appointments",
+  ];
+  const requested = (payload.permissions ?? {}) as Json;
+  const permissions = Object.fromEntries(
+    allowedPermissionKeys.map((key) => [key, requested[key] === true]),
+  );
+  const { error: permissionsError } = await admin
+    .from("user_permissions")
+    .update(permissions)
+    .eq("user_id", userId);
+  if (permissionsError) throw permissionsError;
+  if (status === "blocked") {
+    await admin.auth.admin.signOut(userId, "global");
+  }
+  return { ok: true };
 }
 
 async function getNotifications(profile: Json) {
@@ -819,27 +892,28 @@ async function importSpreadsheet(profile: Json, payload: Json) {
       const isRecovery = rawContact.recovery === true;
       if (!fullName && !cpf && !phones.length) continue;
 
-      let lookup = admin
-        .from("contacts")
-        .select("id")
-        .eq("list_id", listId);
+      let lookup = admin.from("contacts").select(
+        "id,current_result,queue_status,pending,assigned_to,support_lawyer_id,recovered,recovery_status",
+      );
       if (cpf) lookup = lookup.eq("cpf", cpf);
-      else lookup = lookup.ilike("full_name", fullName).ilike("company", company || "");
+      else {
+        lookup = lookup
+          .eq("list_id", listId)
+          .ilike("full_name", fullName)
+          .ilike("company", company || "");
+      }
       const { data: existingContact, error: lookupError } = await lookup
         .limit(1)
         .maybeSingle();
       if (lookupError) throw lookupError;
 
-      const contactData = {
+      const identityData = {
         list_id: listId,
         full_name: fullName || "Contato sem nome",
         first_name: fullName.split(/\s+/)[0] || "",
         cpf: cpf || null,
         company: company || null,
         company_first_name: company.split(/\s+/)[0] || null,
-        current_result: result || (isRecovery ? "Sem WhatsApp" : null),
-        queue_status: isRecovery ? "recovery" : "waiting",
-        pending: true,
         source_payload: rawContact.sourcePayload ?? {},
         update_origin: "spreadsheet_upload",
         updated_by_text: String(profile.email ?? ""),
@@ -849,7 +923,7 @@ async function importSpreadsheet(profile: Json, payload: Json) {
       if (contactId) {
         const { error } = await admin
           .from("contacts")
-          .update(contactData)
+          .update(identityData)
           .eq("id", contactId);
         if (error) throw error;
         updated += 1;
@@ -857,7 +931,13 @@ async function importSpreadsheet(profile: Json, payload: Json) {
         const queuePosition = nextPosition++;
         const { data, error } = await admin
           .from("contacts")
-          .insert({ ...contactData, queue_position: queuePosition })
+          .insert({
+            ...identityData,
+            current_result: result || (isRecovery ? "Sem WhatsApp" : null),
+            queue_status: isRecovery ? "recovery" : "waiting",
+            pending: true,
+            queue_position: queuePosition,
+          })
           .select("id")
           .single();
         if (error) throw error;
@@ -1075,6 +1155,9 @@ Deno.serve(async (request: Request) => {
         break;
       case "invite_user":
         data = await inviteUser(profile, payload);
+        break;
+      case "update_user":
+        data = await updateUser(profile, payload);
         break;
       case "notifications":
         data = await getNotifications(profile);
