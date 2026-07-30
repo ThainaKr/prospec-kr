@@ -2,6 +2,7 @@ import { FormEvent, useEffect, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
 import ProspecDashboard from "./ProspecDashboard";
 import { productionUrl, supabase } from "./supabase";
+import { ProspecThemePreview } from "./ui/ProspecThemePreview";
 
 function Login() {
   const [email, setEmail] = useState("");
@@ -87,6 +88,10 @@ function Login() {
   );
 }
 
+function isThemePreviewRoute() {
+  return window.location.pathname === "/visual-preview";
+}
+
 export default function App() {
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
@@ -102,6 +107,10 @@ export default function App() {
     });
     return () => data.subscription.unsubscribe();
   }, []);
+
+  if (isThemePreviewRoute()) {
+    return <ProspecThemePreview />;
+  }
 
   if (loading) {
     return (
