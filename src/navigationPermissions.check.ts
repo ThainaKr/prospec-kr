@@ -13,7 +13,7 @@ const lawyerPermissions = {
   can_view_message_templates: true,
   can_view_reports_overview: true,
   can_view_profile: true,
-  can_manage_chips_users: true,
+  can_manage_chips_users: false,
 };
 
 const lawyerNav: Array<[ProspecPageKey, string, string]> = [
