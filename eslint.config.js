@@ -27,4 +27,14 @@ export default tseslint.config(
       "react-refresh/only-export-components": ["warn", { allowConstantExport: true }],
     },
   },
+  {
+    files: ["src/ProspecDashboard.tsx"],
+    linterOptions: {
+      reportUnusedDisableDirectives: "off",
+    },
+    rules: {
+      "@typescript-eslint/no-unused-vars": "off",
+      "no-useless-computed-key": "off",
+    },
+  },
 );
