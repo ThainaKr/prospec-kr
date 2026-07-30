@@ -4,7 +4,7 @@ import ProspecDashboard from "./ProspecDashboard";
 import { productionUrl, supabase } from "./supabase";
 
 function Login() {
-  const [email, setEmail] = useState("chatddt10@gmail.com");
+  const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
   const [sent, setSent] = useState(false);
   const [error, setError] = useState("");
@@ -19,7 +19,7 @@ function Login() {
     const { error: authError } = await supabase.auth.signInWithOtp({
       email: email.trim().toLowerCase(),
       options: {
-        shouldCreateUser: true,
+        shouldCreateUser: false,
         emailRedirectTo: redirectTo,
       },
     });
@@ -28,7 +28,8 @@ function Login() {
       setError(
         message.includes("convite") ||
         message.includes("database error") ||
-        message.includes("not authorized")
+        message.includes("not authorized") ||
+        message.includes("signups not allowed")
           ? "Este e-mail não possui convite ativo para o PROSPEC KR."
           : "Não foi possível enviar o acesso. Confira o e-mail e tente novamente.",
       );
