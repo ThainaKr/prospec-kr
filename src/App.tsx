@@ -2,6 +2,7 @@ import { FormEvent, useEffect, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
 import ProspecDashboard from "./ProspecDashboard";
 import { productionUrl, supabase } from "./supabase";
+import { ProspecAgendaPreview } from "./ui/ProspecAgendaPreview";
 import { ProspecThemePreview } from "./ui/ProspecThemePreview";
 
 function Login() {
@@ -88,8 +89,8 @@ function Login() {
   );
 }
 
-function isThemePreviewRoute() {
-  return window.location.pathname === "/visual-preview";
+function getPreviewRoute() {
+  return window.location.pathname;
 }
 
 export default function App() {
@@ -108,8 +109,12 @@ export default function App() {
     return () => data.subscription.unsubscribe();
   }, []);
 
-  if (isThemePreviewRoute()) {
+  const previewRoute = getPreviewRoute();
+  if (previewRoute === "/visual-preview") {
     return <ProspecThemePreview />;
+  }
+  if (previewRoute === "/agenda-preview") {
+    return <ProspecAgendaPreview />;
   }
 
   if (loading) {
