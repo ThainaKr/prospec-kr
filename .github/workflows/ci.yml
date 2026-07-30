@@ -38,7 +38,7 @@ jobs:
           if-no-files-found: error
 
       - name: Fail if lint failed
-        if: steps.lint.outcome == 'failure'
+        if: steps.lint.conclusion == 'failure'
         run: exit 1
 
       - name: Build
