@@ -2,6 +2,7 @@ import { FormEvent, useEffect, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
 import ProspecDashboard from "./ProspecDashboard";
 import { productionUrl, supabase } from "./supabase";
+import { ProspecAgendaLive } from "./ui/ProspecAgendaLive";
 import { ProspecAgendaPreview } from "./ui/ProspecAgendaPreview";
 import { ProspecThemePreview } from "./ui/ProspecThemePreview";
 
@@ -125,6 +126,10 @@ export default function App() {
         <div className="loading-block"><span className="spinner" />Validando seu acesso...</div>
       </main>
     );
+  }
+
+  if (previewRoute === "/agenda-live") {
+    return session ? <ProspecAgendaLive /> : <Login />;
   }
 
   return session ? <ProspecDashboard session={session} /> : <Login />;
