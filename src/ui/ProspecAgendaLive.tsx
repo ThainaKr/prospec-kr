@@ -1,6 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { callProspecApi } from "../api/prospecApi";
-import { mapAppointmentToAgendaItem, type AppointmentRecord } from "./ProspecAgendaData";
+import {
+  agendaRangeForView,
+  mapAgendaRecord,
+  type ProspecAgendaRecord,
+} from "./ProspecAgendaData";
 import {
   ProspecAvatar,
   ProspecBadge,
@@ -13,23 +17,6 @@ import {
 
 type ViewMode = "day" | "week" | "month";
 
-function startOfDay(date: Date) {
-  const result = new Date(date);
-  result.setHours(0, 0, 0, 0);
-  return result;
-}
-
-function rangeFor(view: ViewMode, date: Date) {
-  const from = startOfDay(date);
-  const to = new Date(from);
-
-  if (view === "day") to.setDate(to.getDate() + 1);
-  if (view === "week") to.setDate(to.getDate() + 7);
-  if (view === "month") to.setMonth(to.getMonth() + 1);
-
-  return { from: from.toISOString(), to: to.toISOString() };
-}
-
 function formatPeriodLabel(view: ViewMode, date: Date) {
   const formatter = new Intl.DateTimeFormat("pt-BR", {
     dateStyle: view === "day" ? "full" : "long",
@@ -38,9 +25,17 @@ function formatPeriodLabel(view: ViewMode, date: Date) {
   return formatter.format(date);
 }
 
+function statusLabel(status: string) {
+  const normalized = status.toLocaleLowerCase("pt-BR");
+  if (normalized === "completed") return "Concluído";
+  if (normalized === "cancelled" || normalized === "canceled") return "Cancelado";
+  if (normalized === "rescheduled") return "Reagendado";
+  return "Agendado";
+}
+
 export function ProspecAgendaLive() {
   const [view, setView] = useState<ViewMode>("day");
-  const [records, setRecords] = useState<AppointmentRecord[]>([]);
+  const [records, setRecords] = useState<ProspecAgendaRecord[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -50,8 +45,8 @@ export function ProspecAgendaLive() {
     setLoading(true);
     setError("");
     try {
-      const range = rangeFor(view, anchorDate);
-      const data = await callProspecApi<AppointmentRecord[]>("appointments", range);
+      const range = agendaRangeForView(view, anchorDate);
+      const data = await callProspecApi<ProspecAgendaRecord[]>("appointments", range);
       setRecords(data || []);
       setSelectedId((current) => current || data?.[0]?.id || null);
     } catch (loadError) {
@@ -65,7 +60,7 @@ export function ProspecAgendaLive() {
     void loadAppointments();
   }, [loadAppointments]);
 
-  const items = useMemo(() => records.map(mapAppointmentToAgendaItem), [records]);
+  const items = useMemo(() => records.map(mapAgendaRecord), [records]);
   const current = items.find((item) => item.id === selectedId) || items[0] || null;
 
   return (
@@ -106,7 +101,7 @@ export function ProspecAgendaLive() {
                     <strong>{item.client}</strong>
                     <span>{item.type} com {item.lawyer}</span>
                   </div>
-                  <ProspecBadge tone={item.tone}>{item.statusLabel}</ProspecBadge>
+                  <ProspecBadge tone={item.tone}>{statusLabel(item.status)}</ProspecBadge>
                 </ProspecCard>
               </button>
             ))}
