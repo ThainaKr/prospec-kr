@@ -1,20 +1,22 @@
 import { createClient } from "@supabase/supabase-js";
 
-const supabaseUrl =
-  import.meta.env.VITE_SUPABASE_URL ||
-  "https://rqrzsfgzdjyinewkrqxf.supabase.co";
-const supabasePublishableKey =
-  import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY ||
-  "sb_publishable_9vIllvlOHiD6lRQwdkMljw_JaIb5tgq";
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+const supabasePublishableKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+
+if (!supabaseUrl || !supabasePublishableKey) {
+  throw new Error(
+    "Variáveis VITE_SUPABASE_URL e VITE_SUPABASE_PUBLISHABLE_KEY não configuradas.",
+  );
+}
 
 export const supabase = createClient(supabaseUrl, supabasePublishableKey, {
   auth: {
     persistSession: true,
     autoRefreshToken: true,
     detectSessionInUrl: true,
-    flowType: "implicit",
+    flowType: "pkce",
   },
 });
 
 export const productionUrl =
-  "https://thainakr.github.io/prospec-kr/";
+  import.meta.env.VITE_APP_URL || "https://thainakr.github.io/prospec-kr/";
