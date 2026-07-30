@@ -23,7 +23,23 @@ jobs:
         run: npm ci
 
       - name: Lint
-        run: npm run lint
+        id: lint
+        continue-on-error: true
+        run: |
+          npm run lint > lint-output.txt 2>&1
+          cat lint-output.txt
+
+      - name: Upload lint report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lint-report
+          path: lint-output.txt
+          if-no-files-found: error
+
+      - name: Fail if lint failed
+        if: steps.lint.outcome == 'failure'
+        run: exit 1
 
       - name: Build
         env:
