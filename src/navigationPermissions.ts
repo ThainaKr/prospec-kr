@@ -27,6 +27,7 @@ export function canAccessPage(
   permissions: ProspecPermissions = {},
 ) {
   if (role === "admin") return true;
+  if (page === "home" || page === "chips-users") return false;
   const permissionKey = PAGE_PERMISSION[page];
   return permissionKey ? permissions[permissionKey] === true : false;
 }
@@ -43,15 +44,10 @@ export function firstAllowedPage(
   role: string,
   permissions: ProspecPermissions = {},
 ): ProspecPageKey {
-  const preferred: ProspecPageKey[] = [
-    "home",
-    "notifications",
-    "agenda",
-    "lists",
-    "reports",
-    "templates",
-    "profile",
-  ];
+  const preferred: ProspecPageKey[] =
+    role === "admin"
+      ? ["home", "notifications", "agenda", "lists", "reports", "templates", "profile"]
+      : ["agenda", "notifications", "lists", "reports", "templates", "profile"];
   return preferred.find((page) => canAccessPage(page, role, permissions)) || "profile";
 }
 
