@@ -56,3 +56,42 @@ assert(
   "A navegação do Advogado não pode exibir Chips e Usuários.",
 );
 assert(filtered.includes("agenda"), "A navegação do Advogado deve exibir Agenda.");
+
+const noPermissions = {};
+assert(
+  firstAllowedPage("lawyer", noPermissions) === "profile",
+  "Advogado sem permissões deve cair no Meu Perfil.",
+);
+assert(
+  !canAccessPage("agenda", "lawyer", noPermissions),
+  "Advogado sem permissão não deve acessar Agenda.",
+);
+assert(
+  !canAccessPage("reports", "lawyer", noPermissions),
+  "Advogado sem permissão não deve acessar Relatórios.",
+);
+assert(
+  !canAccessPage("templates", "lawyer", noPermissions),
+  "Advogado sem permissão não deve acessar Modelos.",
+);
+
+const adminPages: ProspecPageKey[] = [
+  "home",
+  "notifications",
+  "agenda",
+  "lists",
+  "templates",
+  "reports",
+  "chips-users",
+  "profile",
+];
+for (const page of adminPages) {
+  assert(
+    canAccessPage(page, "admin", {}),
+    `Administradora deve acessar ${page}.`,
+  );
+}
+assert(
+  firstAllowedPage("admin", {}) === "home",
+  "Administradora deve iniciar pela Home.",
+);
