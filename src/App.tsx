@@ -6,6 +6,7 @@ import { ProspecAgendaLive } from "./ui/ProspecAgendaLive";
 import { ProspecAgendaPreview } from "./ui/ProspecAgendaPreview";
 import { ProspecThemePreview } from "./ui/ProspecThemePreview";
 import { ProspecAttendancePreview } from "./ui/ProspecAttendancePreview";
+import { ProspecFunnelPreview } from "./ui/ProspecFunnelPreview";
 
 function Login() {
   const [email, setEmail] = useState("");
@@ -120,6 +121,9 @@ export default function App() {
   }
   if (previewRoute === "/atendimento-preview") {
     return <ProspecAttendancePreview />;
+  }
+  if (previewRoute === "/funil-preview") {
+    return <ProspecFunnelPreview />;
   }
 
   if (loading) {
