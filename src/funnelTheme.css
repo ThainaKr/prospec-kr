@@ -1,0 +1,52 @@
+.funnel-shell { display: grid; grid-template-columns: 220px minmax(0,1fr); min-height: 100svh; }
+.funnel-main { min-width: 0; }
+.funnel-topbar { position: sticky; top: 0; z-index: 30; grid-template-columns: minmax(260px,1fr) auto auto; }
+.funnel-filters { display: flex; gap: 8px; flex-wrap: wrap; }
+.funnel-filters button { min-height: 36px; padding: 0 12px; border: 1px solid var(--prospec-border); border-radius: 10px; background: #0c0f0e; color: var(--prospec-text-secondary); }
+.funnel-filters button.is-active { border-color: var(--prospec-green-light); color: var(--prospec-green-light-soft); background: rgba(121,201,183,.12); }
+.funnel-metrics { display: grid; grid-template-columns: repeat(6,minmax(0,1fr)); gap: 10px; padding: 12px; }
+.funnel-metric { padding: 14px; display: grid; gap: 8px; }
+.funnel-metric span,.funnel-metric small { color: var(--prospec-text-secondary); font-size: 12px; }
+.funnel-metric strong { font-size: 28px; }
+.funnel-board-wrap { overflow-x: auto; padding: 0 12px 12px; }
+.funnel-board { min-width: 1680px; display: grid; grid-template-columns: repeat(7,minmax(220px,1fr)); gap: 10px; }
+.funnel-column { min-height: 560px; border: 1px solid var(--prospec-border-soft); border-radius: 16px; background: rgba(8,10,10,.8); }
+.funnel-column-head { display: grid; grid-template-columns: 8px 1fr; gap: 10px; padding: 12px; border-bottom: 1px solid var(--prospec-border-soft); }
+.funnel-column-head > span { border-radius: 999px; }
+.funnel-column-head div { display: grid; gap: 2px; }
+.funnel-column-head small { color: var(--prospec-text-muted); }
+.funnel-column-body { padding: 10px; display: grid; align-content: start; gap: 10px; }
+.funnel-card { padding: 12px; display: grid; gap: 10px; cursor: grab; }
+.funnel-card:active { cursor: grabbing; }
+.funnel-card-head { display: grid; grid-template-columns: auto 1fr; gap: 10px; align-items: center; }
+.funnel-card-head span { display: grid; gap: 2px; min-width: 0; }
+.funnel-card-head small { color: var(--prospec-text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.funnel-card-tags { display: flex; flex-wrap: wrap; gap: 6px; }
+.funnel-card-tags span { padding: 4px 8px; border-radius: 999px; border: 1px solid var(--prospec-border); color: var(--prospec-green-light-soft); font-size: 11px; }
+.funnel-card p { margin: 0; color: var(--prospec-text-secondary); font-size: 12px; }
+.funnel-card-footer { display: flex; align-items: center; justify-content: space-between; }
+.funnel-card-footer small { color: var(--prospec-text-muted); }
+.funnel-card-footer button { border: 0; background: transparent; color: var(--prospec-text); }
+.funnel-insights { display: grid; grid-template-columns: 1.3fr 1fr; gap: 12px; padding: 0 12px 24px; }
+.funnel-insights > article { padding: 16px; }
+.funnel-bars { display: grid; gap: 10px; }
+.funnel-bars > div { display: grid; grid-template-columns: 150px 1fr 46px; gap: 10px; align-items: center; }
+.funnel-bars span { color: var(--prospec-text-secondary); font-size: 12px; }
+.funnel-bars b { height: 8px; border-radius: 999px; background: #202625; overflow: hidden; }
+.funnel-bars i { display: block; height: 100%; background: linear-gradient(90deg,var(--prospec-green-light),var(--prospec-orange-soft)); }
+@media (max-width: 1100px) {
+  .funnel-shell { grid-template-columns: 86px minmax(0,1fr); }
+  .funnel-shell .attendance-sidebar { width: 86px; }
+  .funnel-shell .attendance-nav-item { grid-template-columns: 1fr; justify-items: center; }
+  .funnel-shell .attendance-nav-item span,.funnel-shell .attendance-brand { display: none; }
+  .funnel-metrics { grid-template-columns: repeat(3,minmax(0,1fr)); }
+  .funnel-topbar { grid-template-columns: 1fr; }
+}
+@media (max-width: 720px) {
+  .funnel-shell { display: block; }
+  .funnel-shell .attendance-sidebar { display: none; }
+  .funnel-metrics { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  .funnel-insights { grid-template-columns: 1fr; }
+  .funnel-board { min-width: 1540px; }
+  .funnel-topbar { position: static; padding: 14px; }
+}
