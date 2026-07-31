@@ -9,6 +9,7 @@ import { ProspecAttendancePreview } from "./ui/ProspecAttendancePreview";
 import { ProspecFunnelPreview } from "./ui/ProspecFunnelPreview";
 import { ProspecChipIntelligencePreview } from "./ui/ProspecChipIntelligencePreview";
 import { ProspecReportsPreview } from "./ui/ProspecReportsPreview";
+import { ProspecNotificationsPreview } from "./ui/ProspecNotificationsPreview";
 
 function Login() {
   const [email, setEmail] = useState("");
@@ -121,6 +122,7 @@ export default function App() {
   if (previewRoute === "/funil-preview") return <ProspecFunnelPreview />;
   if (previewRoute === "/chips-inteligencia-preview") return <ProspecChipIntelligencePreview />;
   if (previewRoute === "/relatorios-preview") return <ProspecReportsPreview />;
+  if (previewRoute === "/notificacoes-preview") return <ProspecNotificationsPreview />;
 
   if (loading) {
     return (
