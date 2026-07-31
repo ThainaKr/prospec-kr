@@ -6,6 +6,7 @@ import "./prospecTheme.css";
 import "./funnelTheme.css";
 import "./chipIntelligence.css";
 import "./notificationsTheme.css";
+import "./premiumGlow.css";
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
