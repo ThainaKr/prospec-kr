@@ -4,6 +4,7 @@ import App from "./App";
 import "./index.css";
 import "./prospecTheme.css";
 import "./funnelTheme.css";
+import "./chipIntelligence.css";
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
