@@ -7,6 +7,7 @@ import { ProspecAgendaPreview } from "./ui/ProspecAgendaPreview";
 import { ProspecThemePreview } from "./ui/ProspecThemePreview";
 import { ProspecAttendancePreview } from "./ui/ProspecAttendancePreview";
 import { ProspecFunnelPreview } from "./ui/ProspecFunnelPreview";
+import { ProspecChipIntelligencePreview } from "./ui/ProspecChipIntelligencePreview";
 
 function Login() {
   const [email, setEmail] = useState("");
@@ -113,18 +114,11 @@ export default function App() {
   }, []);
 
   const previewRoute = getPreviewRoute();
-  if (previewRoute === "/visual-preview") {
-    return <ProspecThemePreview />;
-  }
-  if (previewRoute === "/agenda-preview") {
-    return <ProspecAgendaPreview />;
-  }
-  if (previewRoute === "/atendimento-preview") {
-    return <ProspecAttendancePreview />;
-  }
-  if (previewRoute === "/funil-preview") {
-    return <ProspecFunnelPreview />;
-  }
+  if (previewRoute === "/visual-preview") return <ProspecThemePreview />;
+  if (previewRoute === "/agenda-preview") return <ProspecAgendaPreview />;
+  if (previewRoute === "/atendimento-preview") return <ProspecAttendancePreview />;
+  if (previewRoute === "/funil-preview") return <ProspecFunnelPreview />;
+  if (previewRoute === "/chips-inteligencia-preview") return <ProspecChipIntelligencePreview />;
 
   if (loading) {
     return (
