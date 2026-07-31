@@ -5,6 +5,7 @@ import { productionUrl, supabase } from "./supabase";
 import { ProspecAgendaLive } from "./ui/ProspecAgendaLive";
 import { ProspecAgendaPreview } from "./ui/ProspecAgendaPreview";
 import { ProspecThemePreview } from "./ui/ProspecThemePreview";
+import { ProspecAttendancePreview } from "./ui/ProspecAttendancePreview";
 
 function Login() {
   const [email, setEmail] = useState("");
@@ -116,6 +117,9 @@ export default function App() {
   }
   if (previewRoute === "/agenda-preview") {
     return <ProspecAgendaPreview />;
+  }
+  if (previewRoute === "/atendimento-preview") {
+    return <ProspecAttendancePreview />;
   }
 
   if (loading) {
