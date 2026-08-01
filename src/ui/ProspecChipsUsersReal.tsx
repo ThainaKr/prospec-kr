@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "../supabase";
+import { callProspecApi } from "../api/prospecApi";
 import { loadRealDataSnapshot, type RealDataSnapshot } from "../api/realData";
 
 const EMPTY: RealDataSnapshot = {
@@ -38,6 +39,14 @@ type DailyStat = {
   usage_minutes: number;
 };
 
+type InviteRole = "lawyer" | "admin";
+
+type InviteResult = {
+  ok: boolean;
+  email: string;
+  email_sent: boolean;
+};
+
 function chipHealthLabel(score: number) {
   if (score <= 60) return "Saudável";
   if (score <= 80) return "Atenção";
@@ -61,6 +70,13 @@ export function ProspecChipsUsersReal() {
   const [error, setError] = useState("");
   const [query, setQuery] = useState("");
   const [tab, setTab] = useState<"chips" | "users">("chips");
+  const [inviteOpen, setInviteOpen] = useState(false);
+  const [inviteName, setInviteName] = useState("");
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [inviteHonorific, setInviteHonorific] = useState("Dr.");
+  const [inviteRole, setInviteRole] = useState<InviteRole>("lawyer");
+  const [inviteBusy, setInviteBusy] = useState(false);
+  const [inviteMessage, setInviteMessage] = useState("");
 
   useEffect(() => {
     let active = true;
@@ -99,6 +115,39 @@ export function ProspecChipsUsersReal() {
 
   const filteredChips = useMemo(() => snapshot.chips.filter((item) => `${item.name} ${item.number} ${item.operator || ""} ${item.status}`.toLowerCase().includes(query.toLowerCase())), [snapshot.chips, query]);
   const filteredUsers = useMemo(() => snapshot.profiles.filter((item) => `${item.full_name} ${item.email || ""} ${item.role} ${item.status}`.toLowerCase().includes(query.toLowerCase())), [snapshot.profiles, query]);
+
+  async function submitInvite(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!permissions?.can_manage_users) return;
+    const fullName = inviteName.trim();
+    const email = inviteEmail.trim().toLowerCase();
+    if (!fullName || !email) {
+      setInviteMessage("Informe nome e e-mail para enviar o convite.");
+      return;
+    }
+
+    setInviteBusy(true);
+    setInviteMessage("");
+    try {
+      const result = await callProspecApi<InviteResult>("invite_user", {
+        fullName,
+        email,
+        honorific: inviteHonorific.trim() || null,
+        role: inviteRole,
+      });
+      setInviteMessage(result.email_sent ? `Convite enviado para ${result.email}.` : `Convite salvo para ${result.email}. O e-mail não foi reenviado porque a conta já existe.`);
+      setInviteName("");
+      setInviteEmail("");
+      setInviteHonorific("Dr.");
+      setInviteRole("lawyer");
+      const refreshed = await loadRealDataSnapshot();
+      setSnapshot(refreshed);
+    } catch (reason) {
+      setInviteMessage(reason instanceof Error ? reason.message : "Não foi possível enviar o convite.");
+    } finally {
+      setInviteBusy(false);
+    }
+  }
 
   if (loading) return <main className="prospec-app real-data-state"><section className="prospec-card"><h1>Carregando chips e usuários...</h1><p>Consultando permissões, métricas e incidentes.</p></section></main>;
   if (error) return <main className="prospec-app real-data-state"><section className="prospec-card"><h1>Não foi possível carregar</h1><p>{error}</p></section></main>;
@@ -154,8 +203,18 @@ export function ProspecChipsUsersReal() {
               <p>O acesso é feito exclusivamente por convite enviado por e-mail.</p>
               <p>Não há criação manual de senha.</p>
               <p>Os status aprovados são Ativo, Pendente e Bloqueado.</p>
-              <button className="prospec-button-primary" disabled={!permissions?.can_manage_users}>Convidar por e-mail</button>
-              {!permissions?.can_manage_users ? <small>Seu perfil não possui permissão para gerenciar usuários.</small> : <small>A ação de convite será ligada ao fluxo seguro na próxima etapa.</small>}
+              <button className="prospec-button-primary" disabled={!permissions?.can_manage_users} onClick={() => setInviteOpen((current) => !current)}>{inviteOpen ? "Fechar convite" : "Convidar por e-mail"}</button>
+              {!permissions?.can_manage_users ? <small>Seu perfil não possui permissão para gerenciar usuários.</small> : null}
+              {inviteOpen && permissions?.can_manage_users ? (
+                <form className="prospec-invite-form" onSubmit={submitInvite}>
+                  <label>Nome completo<input value={inviteName} onChange={(event) => setInviteName(event.target.value)} placeholder="Nome do usuário" autoComplete="name" /></label>
+                  <label>E-mail<input type="email" value={inviteEmail} onChange={(event) => setInviteEmail(event.target.value)} placeholder="usuario@empresa.com" autoComplete="email" /></label>
+                  <label>Tratamento<input value={inviteHonorific} onChange={(event) => setInviteHonorific(event.target.value)} placeholder="Dr. ou Dra." /></label>
+                  <label>Perfil<select value={inviteRole} onChange={(event) => setInviteRole(event.target.value as InviteRole)}><option value="lawyer">Advogado</option><option value="admin">Administrador</option></select></label>
+                  <button className="prospec-button-primary" type="submit" disabled={inviteBusy}>{inviteBusy ? "Enviando..." : "Enviar convite"}</button>
+                  {inviteMessage ? <p className="prospec-invite-feedback" role="status">{inviteMessage}</p> : null}
+                </form>
+              ) : null}
             </article>
           </section>
         )}
