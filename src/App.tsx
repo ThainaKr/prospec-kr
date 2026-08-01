@@ -19,6 +19,19 @@ import { ProspecAgendaNotificationsReal } from "./ui/ProspecAgendaNotificationsR
 import { ProspecReportsReal } from "./ui/ProspecReportsReal";
 import { ProspecChipsUsersReal } from "./ui/ProspecChipsUsersReal";
 
+const APP_BASE_PATH = "/prospec-kr";
+
+function normalizeRoute(pathname: string) {
+  const withoutBase = pathname.startsWith(APP_BASE_PATH)
+    ? pathname.slice(APP_BASE_PATH.length)
+    : pathname;
+  return withoutBase.replace(/\/+$/, "") || "/";
+}
+
+function appRootUrl() {
+  return `${window.location.origin}${APP_BASE_PATH}/`;
+}
+
 function Login() {
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
@@ -120,7 +133,7 @@ function NotFound() {
         <p className="eyebrow">PROSPEC KR</p>
         <h1>Página não encontrada</h1>
         <p>O endereço informado não pertence às rotas oficiais do sistema.</p>
-        <button className="prospec-button-primary" onClick={() => { window.location.href = "/"; }}>
+        <button className="prospec-button-primary" onClick={() => { window.location.href = appRootUrl(); }}>
           Voltar ao sistema
         </button>
       </section>
@@ -158,7 +171,7 @@ export default function App() {
   if (loading) return <Splash />;
   if (!session) return <Login />;
 
-  const route = window.location.pathname.replace(/\/+$/, "") || "/";
+  const route = normalizeRoute(window.location.pathname);
 
   if (route === "/" || route === "/app") return <ProspecDashboard session={session} />;
 
