@@ -37,7 +37,7 @@ export async function loadRealDataSnapshot(): Promise<RealDataSnapshot> {
     selectOrThrow<ContactRow>("contacts", "id,full_name,first_name,company,list_id,current_result,closing_chance,pending,queue_status,recovered,recovery_status,last_activity_at", { order: { column: "last_activity_at" }, limit: 200 }),
     selectOrThrow<RecoveryRow>("contact_recovery", "id,contact_id,original_list_id,status,attempts,recovered_phone,updated_at", { order: { column: "updated_at" }, limit: 100 }),
     selectOrThrow<AppointmentRow>("appointments", "id,contact_id,title,starts_at,ends_at,status,owner_id,support_lawyer_id", { order: { column: "starts_at", ascending: true }, limit: 100 }),
-    selectOrThrow<NotificationRow>("notifications", "id,title,body,kind,category,priority,created_at,read_at,action_url", { order: { column: "created_at" }, limit: 100 }),
+    selectOrThrow<NotificationRow>("notifications", "id,title,body,kind,category,priority,created_at,read_at,completed_at,archived_at,scheduled_for,action_url,source_module,entity_type,entity_id", { order: { column: "created_at" }, limit: 200 }),
     selectOrThrow<ChipRow>("chips", "id,name,number,operator,status,health_score,auto_suspended,last_activity_at", { order: { column: "name", ascending: true } }),
     selectOrThrow<MessageTemplateRow>("message_templates", "id,name,body,category,position,active,usage_count,library_scope", { order: { column: "position", ascending: true }, limit: 200 }),
   ]);
