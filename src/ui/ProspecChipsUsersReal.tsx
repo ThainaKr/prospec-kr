@@ -1,0 +1,165 @@
+import { useEffect, useMemo, useState } from "react";
+import { supabase } from "../supabase";
+import { loadRealDataSnapshot, type RealDataSnapshot } from "../api/realData";
+
+const EMPTY: RealDataSnapshot = {
+  profiles: [], lists: [], contacts: [], recoveries: [], appointments: [], notifications: [], chips: [], templates: [],
+};
+
+type PermissionRow = {
+  user_id: string;
+  can_manage_chips_users: boolean;
+  can_manage_chips: boolean;
+  can_manage_users: boolean;
+  can_view_settings: boolean;
+};
+
+type ChipIncident = {
+  id: string;
+  chip_id: string;
+  incident_type: string;
+  occurred_at: string;
+  reason: string | null;
+  messages_24h: number;
+  replies: number;
+  meetings: number;
+};
+
+type DailyStat = {
+  id: string;
+  chip_id: string;
+  stat_date: string;
+  messages_sent: number;
+  replies_received: number;
+  audios_sent: number;
+  schedules_created: number;
+  meetings_completed: number;
+  contracts_closed: number;
+  usage_minutes: number;
+};
+
+function chipHealthLabel(score: number) {
+  if (score <= 60) return "Saudável";
+  if (score <= 80) return "Atenção";
+  if (score <= 95) return "Alto risco";
+  return "Risco crítico";
+}
+
+function userStatusLabel(status: string) {
+  if (status === "active") return "Ativo";
+  if (status === "pending") return "Pendente";
+  if (status === "blocked") return "Bloqueado";
+  return status;
+}
+
+export function ProspecChipsUsersReal() {
+  const [snapshot, setSnapshot] = useState<RealDataSnapshot>(EMPTY);
+  const [permissions, setPermissions] = useState<PermissionRow | null>(null);
+  const [incidents, setIncidents] = useState<ChipIncident[]>([]);
+  const [dailyStats, setDailyStats] = useState<DailyStat[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [query, setQuery] = useState("");
+  const [tab, setTab] = useState<"chips" | "users">("chips");
+
+  useEffect(() => {
+    let active = true;
+    async function load() {
+      try {
+        const { data: sessionData } = await supabase.auth.getSession();
+        const userId = sessionData.session?.user.id;
+        if (!userId) throw new Error("Sessão não encontrada.");
+
+        const [data, permissionResult, incidentResult, statResult] = await Promise.all([
+          loadRealDataSnapshot(),
+          supabase.from("user_permissions").select("user_id,can_manage_chips_users,can_manage_chips,can_manage_users,can_view_settings").eq("user_id", userId).maybeSingle(),
+          supabase.from("chip_incidents").select("id,chip_id,incident_type,occurred_at,reason,messages_24h,replies,meetings").order("occurred_at", { ascending: false }).limit(50),
+          supabase.from("chip_daily_stats").select("id,chip_id,stat_date,messages_sent,replies_received,audios_sent,schedules_created,meetings_completed,contracts_closed,usage_minutes").order("stat_date", { ascending: false }).limit(100),
+        ]);
+
+        if (permissionResult.error) throw permissionResult.error;
+        if (incidentResult.error) throw incidentResult.error;
+        if (statResult.error) throw statResult.error;
+        if (!active) return;
+        setSnapshot(data);
+        setPermissions(permissionResult.data as PermissionRow | null);
+        setIncidents((incidentResult.data ?? []) as ChipIncident[]);
+        setDailyStats((statResult.data ?? []) as DailyStat[]);
+      } catch (reason) {
+        if (active) setError(reason instanceof Error ? reason.message : "Falha ao carregar chips e usuários.");
+      } finally {
+        if (active) setLoading(false);
+      }
+    }
+    load();
+    return () => { active = false; };
+  }, []);
+
+  const canAccess = Boolean(permissions?.can_manage_chips_users || permissions?.can_manage_chips || permissions?.can_manage_users);
+
+  const filteredChips = useMemo(() => snapshot.chips.filter((item) => `${item.name} ${item.number} ${item.operator || ""} ${item.status}`.toLowerCase().includes(query.toLowerCase())), [snapshot.chips, query]);
+  const filteredUsers = useMemo(() => snapshot.profiles.filter((item) => `${item.full_name} ${item.email || ""} ${item.role} ${item.status}`.toLowerCase().includes(query.toLowerCase())), [snapshot.profiles, query]);
+
+  if (loading) return <main className="prospec-app real-data-state"><section className="prospec-card"><h1>Carregando chips e usuários...</h1><p>Consultando permissões, métricas e incidentes.</p></section></main>;
+  if (error) return <main className="prospec-app real-data-state"><section className="prospec-card"><h1>Não foi possível carregar</h1><p>{error}</p></section></main>;
+  if (!canAccess) return <main className="prospec-app real-data-state"><section className="prospec-card"><h1>Acesso restrito</h1><p>Esta área é exclusiva da Administradora.</p></section></main>;
+
+  return (
+    <main className="prospec-app real-data-shell">
+      <header className="all-screens-header">
+        <div><p className="eyebrow">CHIPS E USUÁRIOS</p><h1>Gestão operacional real</h1><span>Dados protegidos por autenticação, permissões e RLS.</span></div>
+      </header>
+
+      <section className="real-data-content">
+        <div className="attendance-tabs-row">
+          <button className={tab === "chips" ? "is-active" : ""} onClick={() => setTab("chips")}>Chips</button>
+          <button className={tab === "users" ? "is-active" : ""} onClick={() => setTab("users")}>Usuários</button>
+        </div>
+        <input className="attendance-search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar por nome, número, operadora, e-mail ou status..." />
+
+        {tab === "chips" ? (
+          <>
+            <section className="all-screens-metrics">
+              <article className="prospec-card premium-card"><span>Chips cadastrados</span><strong>{snapshot.chips.length}</strong><small>valor real</small></article>
+              <article className="prospec-card premium-card"><span>Saudáveis</span><strong>{snapshot.chips.filter((item) => item.health_score <= 60).length}</strong><small>0 a 60</small></article>
+              <article className="prospec-card premium-card"><span>Em atenção</span><strong>{snapshot.chips.filter((item) => item.health_score > 60 && item.health_score <= 80).length}</strong><small>61 a 80</small></article>
+              <article className="prospec-card premium-card"><span>Alto/crítico</span><strong>{snapshot.chips.filter((item) => item.health_score > 80).length}</strong><small>acima de 80</small></article>
+            </section>
+            <section className="all-screens-grid">
+              <article className="prospec-card premium-card panel">
+                <h2>Chips reais</h2>
+                {filteredChips.length ? filteredChips.map((item) => {
+                  const stats = dailyStats.filter((stat) => stat.chip_id === item.id);
+                  const latest = stats[0];
+                  return <div className="recovery-card" key={item.id}><strong>{item.name}</strong><span>{item.number} · {item.operator || "Operadora não informada"}</span><small>{item.status} · {chipHealthLabel(item.health_score)} · índice {item.health_score}</small><small>{latest ? `${latest.messages_sent} mensagens · ${latest.replies_received} respostas · ${latest.usage_minutes} min` : "Sem estatística diária registrada"}</small><em>{item.auto_suspended ? "Envios suspensos automaticamente" : "Envios não suspensos"}</em></div>;
+                }) : <p>Nenhum chip encontrado.</p>}
+              </article>
+              <article className="prospec-card premium-card panel">
+                <h2>Incidentes recentes</h2>
+                {incidents.length ? incidents.map((item) => {
+                  const chip = snapshot.chips.find((entry) => entry.id === item.chip_id);
+                  return <div className="list-row" key={item.id}><div><strong>{chip?.name || "Chip não localizado"}</strong><small>{new Date(item.occurred_at).toLocaleString("pt-BR")}</small></div><span>{item.incident_type}</span><em>{item.reason || "Sem motivo registrado"}</em></div>;
+                }) : <p>Nenhum incidente registrado.</p>}
+              </article>
+            </section>
+          </>
+        ) : (
+          <section className="all-screens-grid">
+            <article className="prospec-card premium-card panel">
+              <div className="section-heading-row"><h2>Usuários reais</h2><small>{filteredUsers.length} encontrado(s)</small></div>
+              {filteredUsers.length ? filteredUsers.map((item) => <div className="contact-line" key={item.id}><span className="prospec-avatar">{item.full_name.split(" ").map((part) => part[0]).slice(0,2).join("")}</span><div><strong>{item.honorific ? `${item.honorific} ` : ""}{item.full_name}</strong><small>{item.email || "E-mail não informado"}</small></div><em>{item.role === "admin" ? "Administrador" : "Advogado"} · {userStatusLabel(item.status)}</em></div>) : <p>Nenhum usuário encontrado.</p>}
+            </article>
+            <article className="prospec-card premium-card panel">
+              <h2>Fluxo de acesso</h2>
+              <p>O acesso é feito exclusivamente por convite enviado por e-mail.</p>
+              <p>Não há criação manual de senha.</p>
+              <p>Os status aprovados são Ativo, Pendente e Bloqueado.</p>
+              <button className="prospec-button-primary" disabled={!permissions?.can_manage_users}>Convidar por e-mail</button>
+              {!permissions?.can_manage_users ? <small>Seu perfil não possui permissão para gerenciar usuários.</small> : <small>A ação de convite será ligada ao fluxo seguro na próxima etapa.</small>}
+            </article>
+          </section>
+        )}
+      </section>
+    </main>
+  );
+}
