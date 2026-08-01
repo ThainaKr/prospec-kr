@@ -16,6 +16,7 @@ import { ProspecRealHome } from "./ui/ProspecRealHome";
 import { ProspecListsContactsReal } from "./ui/ProspecListsContactsReal";
 import { ProspecAgendaNotificationsReal } from "./ui/ProspecAgendaNotificationsReal";
 import { ProspecReportsReal } from "./ui/ProspecReportsReal";
+import { ProspecChipsUsersReal } from "./ui/ProspecChipsUsersReal";
 
 function Login() {
   const [email, setEmail] = useState("");
@@ -163,6 +164,10 @@ export default function App() {
 
   if (previewRoute === "/relatorios-real") {
     return session ? <ProspecReportsReal /> : <Login />;
+  }
+
+  if (previewRoute === "/chips-usuarios-real") {
+    return session ? <ProspecChipsUsersReal /> : <Login />;
   }
 
   return session ? <ProspecDashboard session={session} /> : <Login />;
