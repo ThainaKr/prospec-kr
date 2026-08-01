@@ -1,6 +1,6 @@
 export type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[];
 
-export type AppRole = "admin" | "lawyer";
+export type AppRole = "admin" | "member" | "lawyer";
 export type UserStatus = "pending" | "active" | "blocked";
 export type QueueStatus = "waiting" | "in_progress" | "returned_to_end" | "completed" | "recovery";
 export type RecoveryStatus = "waiting" | "searching" | "new_number" | "impossible" | "recovered";
@@ -15,7 +15,52 @@ export interface ProfileRow {
   status: UserStatus;
   active: boolean;
   honorific: string | null;
+  job_title: string | null;
+  home_page: string;
+  organization_id: string | null;
   last_access_at: string | null;
+}
+
+export interface WhatsAppChannelRow {
+  id: string;
+  organization_id: string;
+  chip_id: string | null;
+  name: string;
+  phone_number: string;
+  phone_number_id: string;
+  provider: "meta_cloud" | "bsp";
+  status: "setup_required" | "connecting" | "connected" | "paused" | "error";
+  quality_rating: string | null;
+  last_webhook_at: string | null;
+  last_error: string | null;
+}
+
+export interface ConversationRow {
+  id: string;
+  organization_id: string;
+  channel_id: string;
+  contact_id: string | null;
+  remote_wa_id: string;
+  display_name: string | null;
+  status: "open" | "pending" | "resolved" | "archived";
+  assigned_to: string | null;
+  unread_count: number;
+  last_message_at: string | null;
+  last_message_preview: string | null;
+}
+
+export interface MessageRow {
+  id: string;
+  conversation_id: string;
+  provider_message_id: string | null;
+  direction: "inbound" | "outbound";
+  message_type: string;
+  body: string | null;
+  media_url: string | null;
+  media_duration_seconds: number | null;
+  status: "queued" | "sent" | "delivered" | "read" | "failed" | "received";
+  error_message: string | null;
+  created_at: string;
 }
 
 export interface ContactListRow {
