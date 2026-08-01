@@ -19,4 +19,4 @@ export const supabase = createClient(supabaseUrl, supabasePublishableKey, {
 });
 
 export const productionUrl =
-  import.meta.env.VITE_APP_URL || "https://thainakr.github.io/prospec-kr/";
+  import.meta.env.VITE_APP_URL || window.location.origin;
