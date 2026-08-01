@@ -40,12 +40,59 @@ type DailyStat = {
 };
 
 type InviteRole = "lawyer" | "admin";
+type InvitePermissionKey =
+  | "can_view_home"
+  | "can_view_agenda"
+  | "can_view_lists"
+  | "can_view_contacts"
+  | "can_view_recovery"
+  | "can_view_notifications"
+  | "can_view_reports_overview"
+  | "can_view_reports_my_performance"
+  | "can_view_message_templates"
+  | "can_view_profile"
+  | "can_manage_chips_users"
+  | "can_view_settings";
 
 type InviteResult = {
   ok: boolean;
   email: string;
   email_sent: boolean;
 };
+
+const PERMISSION_OPTIONS: Array<{ key: InvitePermissionKey; label: string; route: string }> = [
+  { key: "can_view_home", label: "Início", route: "/inicio" },
+  { key: "can_view_agenda", label: "Agenda", route: "/agenda" },
+  { key: "can_view_lists", label: "Listas", route: "/listas-contatos" },
+  { key: "can_view_contacts", label: "Contatos", route: "/listas-contatos" },
+  { key: "can_view_recovery", label: "Recuperação de Contatos", route: "/listas-contatos" },
+  { key: "can_view_notifications", label: "Notificações", route: "/agenda-notificacoes" },
+  { key: "can_view_reports_overview", label: "Relatórios · Visão Geral", route: "/relatorios" },
+  { key: "can_view_reports_my_performance", label: "Relatórios · Meu Desempenho", route: "/relatorios" },
+  { key: "can_view_message_templates", label: "Modelos de Mensagens", route: "/modelos-mensagens" },
+  { key: "can_view_profile", label: "Meu Perfil", route: "/perfil" },
+  { key: "can_manage_chips_users", label: "Chips e Usuários", route: "/chips-usuarios" },
+  { key: "can_view_settings", label: "Configurações", route: "/configuracoes" },
+];
+
+const LAWYER_DEFAULTS: Record<InvitePermissionKey, boolean> = {
+  can_view_home: false,
+  can_view_agenda: true,
+  can_view_lists: false,
+  can_view_contacts: true,
+  can_view_recovery: false,
+  can_view_notifications: true,
+  can_view_reports_overview: true,
+  can_view_reports_my_performance: true,
+  can_view_message_templates: true,
+  can_view_profile: true,
+  can_manage_chips_users: false,
+  can_view_settings: false,
+};
+
+const ADMIN_DEFAULTS: Record<InvitePermissionKey, boolean> = Object.fromEntries(
+  PERMISSION_OPTIONS.map((item) => [item.key, true]),
+) as Record<InvitePermissionKey, boolean>;
 
 function chipHealthLabel(score: number) {
   if (score <= 60) return "Saudável";
@@ -75,6 +122,8 @@ export function ProspecChipsUsersReal() {
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteHonorific, setInviteHonorific] = useState("Dr.");
   const [inviteRole, setInviteRole] = useState<InviteRole>("lawyer");
+  const [invitePermissions, setInvitePermissions] = useState<Record<InvitePermissionKey, boolean>>(LAWYER_DEFAULTS);
+  const [landingRoute, setLandingRoute] = useState("/agenda");
   const [inviteBusy, setInviteBusy] = useState(false);
   const [inviteMessage, setInviteMessage] = useState("");
 
@@ -115,6 +164,29 @@ export function ProspecChipsUsersReal() {
 
   const filteredChips = useMemo(() => snapshot.chips.filter((item) => `${item.name} ${item.number} ${item.operator || ""} ${item.status}`.toLowerCase().includes(query.toLowerCase())), [snapshot.chips, query]);
   const filteredUsers = useMemo(() => snapshot.profiles.filter((item) => `${item.full_name} ${item.email || ""} ${item.role} ${item.status}`.toLowerCase().includes(query.toLowerCase())), [snapshot.profiles, query]);
+  const availableLandingRoutes = useMemo(() => {
+    const unique = new Map<string, string>();
+    PERMISSION_OPTIONS.forEach((item) => {
+      if (invitePermissions[item.key] && !unique.has(item.route)) unique.set(item.route, item.label);
+    });
+    return Array.from(unique.entries()).map(([route, label]) => ({ route, label }));
+  }, [invitePermissions]);
+
+  useEffect(() => {
+    if (availableLandingRoutes.some((item) => item.route === landingRoute)) return;
+    setLandingRoute(availableLandingRoutes[0]?.route || "/perfil");
+  }, [availableLandingRoutes, landingRoute]);
+
+  function changeInviteRole(role: InviteRole) {
+    setInviteRole(role);
+    const defaults = role === "admin" ? ADMIN_DEFAULTS : LAWYER_DEFAULTS;
+    setInvitePermissions(defaults);
+    setLandingRoute(role === "admin" ? "/inicio" : "/agenda");
+  }
+
+  function toggleInvitePermission(key: InvitePermissionKey) {
+    setInvitePermissions((current) => ({ ...current, [key]: !current[key] }));
+  }
 
   async function submitInvite(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -123,6 +195,10 @@ export function ProspecChipsUsersReal() {
     const email = inviteEmail.trim().toLowerCase();
     if (!fullName || !email) {
       setInviteMessage("Informe nome e e-mail para enviar o convite.");
+      return;
+    }
+    if (!Object.values(invitePermissions).some(Boolean)) {
+      setInviteMessage("Selecione pelo menos uma página de acesso.");
       return;
     }
 
@@ -134,12 +210,16 @@ export function ProspecChipsUsersReal() {
         email,
         honorific: inviteHonorific.trim() || null,
         role: inviteRole,
+        permissions: invitePermissions,
+        landingRoute,
       });
       setInviteMessage(result.email_sent ? `Convite enviado para ${result.email}.` : `Convite salvo para ${result.email}. O e-mail não foi reenviado porque a conta já existe.`);
       setInviteName("");
       setInviteEmail("");
       setInviteHonorific("Dr.");
       setInviteRole("lawyer");
+      setInvitePermissions(LAWYER_DEFAULTS);
+      setLandingRoute("/agenda");
       const refreshed = await loadRealDataSnapshot();
       setSnapshot(refreshed);
     } catch (reason) {
@@ -201,8 +281,8 @@ export function ProspecChipsUsersReal() {
             <article className="prospec-card premium-card panel">
               <h2>Fluxo de acesso</h2>
               <p>O acesso é feito exclusivamente por convite enviado por e-mail.</p>
-              <p>Não há criação manual de senha.</p>
-              <p>Os status aprovados são Ativo, Pendente e Bloqueado.</p>
+              <p>A Administradora escolhe individualmente as páginas e ações liberadas para cada pessoa.</p>
+              <p>Não existe página inicial obrigatória por perfil.</p>
               <button className="prospec-button-primary" disabled={!permissions?.can_manage_users} onClick={() => setInviteOpen((current) => !current)}>{inviteOpen ? "Fechar convite" : "Convidar por e-mail"}</button>
               {!permissions?.can_manage_users ? <small>Seu perfil não possui permissão para gerenciar usuários.</small> : null}
               {inviteOpen && permissions?.can_manage_users ? (
@@ -210,7 +290,17 @@ export function ProspecChipsUsersReal() {
                   <label>Nome completo<input value={inviteName} onChange={(event) => setInviteName(event.target.value)} placeholder="Nome do usuário" autoComplete="name" /></label>
                   <label>E-mail<input type="email" value={inviteEmail} onChange={(event) => setInviteEmail(event.target.value)} placeholder="usuario@empresa.com" autoComplete="email" /></label>
                   <label>Tratamento<input value={inviteHonorific} onChange={(event) => setInviteHonorific(event.target.value)} placeholder="Dr. ou Dra." /></label>
-                  <label>Perfil<select value={inviteRole} onChange={(event) => setInviteRole(event.target.value as InviteRole)}><option value="lawyer">Advogado</option><option value="admin">Administrador</option></select></label>
+                  <label>Perfil<select value={inviteRole} onChange={(event) => changeInviteRole(event.target.value as InviteRole)}><option value="lawyer">Advogado</option><option value="admin">Administrador</option></select></label>
+                  <fieldset className="prospec-permissions-grid">
+                    <legend>Páginas e acessos</legend>
+                    {PERMISSION_OPTIONS.map((item) => (
+                      <label key={item.key} className="prospec-permission-option">
+                        <input type="checkbox" checked={invitePermissions[item.key]} onChange={() => toggleInvitePermission(item.key)} />
+                        <span>{item.label}</span>
+                      </label>
+                    ))}
+                  </fieldset>
+                  <label>Página inicial<select value={landingRoute} onChange={(event) => setLandingRoute(event.target.value)}>{availableLandingRoutes.map((item) => <option key={item.route} value={item.route}>{item.label}</option>)}</select></label>
                   <button className="prospec-button-primary" type="submit" disabled={inviteBusy}>{inviteBusy ? "Enviando..." : "Enviar convite"}</button>
                   {inviteMessage ? <p className="prospec-invite-feedback" role="status">{inviteMessage}</p> : null}
                 </form>
