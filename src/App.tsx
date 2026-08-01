@@ -15,6 +15,7 @@ import { ProspecRealDataPreview } from "./ui/ProspecRealDataPreview";
 import { ProspecRealHome } from "./ui/ProspecRealHome";
 import { ProspecListsContactsReal } from "./ui/ProspecListsContactsReal";
 import { ProspecAgendaNotificationsReal } from "./ui/ProspecAgendaNotificationsReal";
+import { ProspecReportsReal } from "./ui/ProspecReportsReal";
 
 function Login() {
   const [email, setEmail] = useState("");
@@ -158,6 +159,10 @@ export default function App() {
 
   if (previewRoute === "/agenda-notificacoes-real") {
     return session ? <ProspecAgendaNotificationsReal /> : <Login />;
+  }
+
+  if (previewRoute === "/relatorios-real") {
+    return session ? <ProspecReportsReal /> : <Login />;
   }
 
   return session ? <ProspecDashboard session={session} /> : <Login />;
