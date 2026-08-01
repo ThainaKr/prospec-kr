@@ -1,4 +1,5 @@
 import { FormEvent, useEffect, useState } from "react";
+import type { ReactNode } from "react";
 import type { Session } from "@supabase/supabase-js";
 import ProspecDashboard from "./ProspecDashboard";
 import { productionUrl, supabase } from "./supabase";
@@ -127,7 +128,7 @@ function NotFound() {
   );
 }
 
-const INTERNAL_PREVIEWS: Record<string, () => JSX.Element> = {
+const INTERNAL_PREVIEWS: Record<string, () => ReactNode> = {
   "/visual-preview": () => <ProspecThemePreview />,
   "/agenda-preview": () => <ProspecAgendaPreview />,
   "/atendimento-preview": () => <ProspecAttendancePreview />,
