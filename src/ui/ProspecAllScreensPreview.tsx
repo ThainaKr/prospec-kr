@@ -1,5 +1,7 @@
 import { useMemo, useState } from "react";
 
+/* eslint-disable @typescript-eslint/no-unused-vars */
+
 type ScreenKey =
   | "admin-home"
   | "lawyer-home"

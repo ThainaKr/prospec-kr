@@ -16,6 +16,12 @@ function ChannelStatus({ channel }: { channel: WhatsAppChannelRow }) {
   return <span className={`inbox-status ${channel.status}`}><i />{label}</span>;
 }
 
+function providerLabel(provider: WhatsAppChannelRow["provider"]) {
+  if (provider === "whatsapp_web") return "WhatsApp comum";
+  if (provider === "evolution") return "WhatsApp via servidor";
+  return "WhatsApp oficial";
+}
+
 export function ProspecRealHome() {
   const [channels, setChannels] = useState<WhatsAppChannelRow[]>([]);
   const [conversations, setConversations] = useState<ConversationRow[]>([]);
@@ -97,7 +103,7 @@ export function ProspecRealHome() {
             <label>CANAL ATIVO</label>
             <select value={channelId} onChange={(event) => setChannelId(event.target.value)}>
               {!channels.length && <option value="">Nenhum WhatsApp conectado</option>}
-              {channels.map((item) => <option key={item.id} value={item.id}>{item.name} · {item.phone_number}</option>)}
+              {channels.map((item) => <option key={item.id} value={item.id}>{item.name} · {item.phone_number} · {providerLabel(item.provider)}</option>)}
             </select>
             {selectedChannel && <ChannelStatus channel={selectedChannel} />}
           </div>
@@ -141,7 +147,7 @@ export function ProspecRealHome() {
                 <textarea value={draft} onChange={(event) => setDraft(event.target.value)} placeholder="Escreva uma mensagem... Use {NOME} ou {EMPRESA}" />
                 <footer><button type="button">☺</button><button type="button">📎</button><button type="button">🎙</button><span /><button disabled={sending || selectedChannel?.status !== "connected"}>{sending ? "Enviando..." : "Enviar ➤"}</button></footer>
               </form>
-            </> : <div className="option1-empty-chat"><div>◉</div><h2>Central pronta para conversas reais</h2><p>Conecte uma conta da WhatsApp Business Platform para enviar e receber mensagens dentro do PROSPEC KR.</p><a href="./chips-usuarios">Configurar primeiro canal</a><small>O histórico será salvo automaticamente no Supabase.</small></div>}
+            </> : <div className="option1-empty-chat"><div>◉</div><h2>Conecte qualquer WhatsApp por QR Code</h2><p>Use WhatsApp comum, Business ou contas próprias da equipe. Cada número vira um canal separado dentro do CRM.</p><a href="./chips-usuarios">Conectar primeiro WhatsApp</a><small>Conversas, áudios, anexos e histórico ficam centralizados no PROSPEC KR.</small></div>}
           </section>
 
           <aside className="option1-details">

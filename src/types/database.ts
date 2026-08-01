@@ -27,8 +27,11 @@ export interface WhatsAppChannelRow {
   chip_id: string | null;
   name: string;
   phone_number: string;
-  phone_number_id: string;
-  provider: "meta_cloud" | "bsp";
+  phone_number_id: string | null;
+  provider: "whatsapp_web" | "evolution" | "meta_cloud" | "bsp";
+  owner_id: string | null;
+  connection_mode: "qr" | "pairing_code" | "official_api";
+  session_state: "new" | "awaiting_pairing" | "connected" | "disconnected" | "logged_out" | "error";
   status: "setup_required" | "connecting" | "connected" | "paused" | "error";
   quality_rating: string | null;
   last_webhook_at: string | null;

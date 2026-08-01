@@ -156,6 +156,20 @@ export default function App() {
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
 
+  async function acceptOnlyActiveInvitedUser(next: Session | null) {
+    if (!next) return null;
+    const { data: profile, error } = await supabase
+      .from("profiles")
+      .select("active,status")
+      .eq("id", next.user.id)
+      .maybeSingle();
+    if (error || !profile || !profile.active || profile.status !== "active") {
+      await supabase.auth.signOut({ scope: "local" });
+      return null;
+    }
+    return next;
+  }
+
   useEffect(() => {
     let active = true;
 
@@ -167,7 +181,7 @@ export default function App() {
         if (code) {
           const { data, error } = await supabase.auth.exchangeCodeForSession(code);
           if (error) throw error;
-          if (active) setSession(data.session);
+          if (active) setSession(await acceptOnlyActiveInvitedUser(data.session));
 
           url.searchParams.delete("code");
           url.searchParams.delete("state");
@@ -176,7 +190,7 @@ export default function App() {
         }
 
         const { data } = await supabase.auth.getSession();
-        if (active) setSession(data.session);
+        if (active) setSession(await acceptOnlyActiveInvitedUser(data.session));
       } catch (reason) {
         console.error("Falha ao concluir autenticação:", reason);
         if (active) setSession(null);
@@ -188,8 +202,10 @@ export default function App() {
     initializeAuth();
     const { data } = supabase.auth.onAuthStateChange((_event, next) => {
       if (active) {
-        setSession(next);
-        setLoading(false);
+        void acceptOnlyActiveInvitedUser(next).then((validated) => {
+          if (active) setSession(validated);
+          if (active) setLoading(false);
+        });
       }
     });
 
@@ -204,7 +220,8 @@ export default function App() {
 
   const route = normalizeRoute(window.location.pathname);
 
-  if (route === "/" || route === "/app") return <ProspecDashboard session={session} />;
+  if (route === "/" || route === "/app") return <ProspecRealHome />;
+  if (route === "/painel-antigo") return <ProspecDashboard session={session} />;
 
   if (route === "/inicio" || route === "/inicio-real") return <ProspecRealHome />;
   if (route === "/funis") return <ProspecFunnelPreview />;

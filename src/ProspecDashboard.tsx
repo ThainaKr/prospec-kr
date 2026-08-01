@@ -1,6 +1,6 @@
 "use client";
 
-/* eslint-disable @typescript-eslint/no-explicit-any, react-hooks/set-state-in-effect */
+/* eslint-disable @typescript-eslint/no-explicit-any */
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
@@ -470,9 +470,7 @@ function ListsView({
 
   const textFrom = (row: AnyRecord, names: string[]) => {
     const normalized = Object.entries(row).reduce<AnyRecord>((acc, [key, value]) => {
-      acc
-        [key.normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim().toLowerCase()] =
-        value;
+      acc[key.normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim().toLowerCase()] = value;
       return acc;
     }, {});
     for (const name of names) {
