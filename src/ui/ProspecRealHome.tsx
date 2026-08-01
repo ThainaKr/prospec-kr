@@ -1,159 +1,155 @@
-import { useEffect, useMemo, useState } from "react";
-import { loadRealDataSnapshot, type FullRealDataSnapshot } from "../api/realData";
-
-const EMPTY: FullRealDataSnapshot = {
-  profiles: [], lists: [], contacts: [], contactPhones: [], contactEvents: [], recoveries: [], appointments: [], notifications: [], chips: [], chipDailyStats: [], templates: [],
-};
+import { FormEvent, useEffect, useMemo, useState } from "react";
+import { loadInbox, loadMessages, sendWhatsAppMessage } from "../api/inbox";
+import type { ConversationRow, MessageRow, WhatsAppChannelRow } from "../types/database";
+import { supabase } from "../supabase";
 
 function initials(name: string) {
-  return name.split(" ").filter(Boolean).slice(0, 2).map((part) => part[0]).join("").toUpperCase();
+  return name.split(" ").filter(Boolean).slice(0, 2).map((part) => part[0]).join("").toUpperCase() || "?";
 }
 
-function formatTime(value: string | null | undefined) {
-  if (!value) return "--:--";
-  return new Intl.DateTimeFormat("pt-BR", { hour: "2-digit", minute: "2-digit" }).format(new Date(value));
+function time(value: string | null) {
+  return value ? new Intl.DateTimeFormat("pt-BR", { hour: "2-digit", minute: "2-digit" }).format(new Date(value)) : "";
 }
 
-function eventLabel(type: string) {
-  const labels: Record<string, string> = {
-    message_sent: "Mensagem enviada",
-    audio_sent: "Áudio enviado",
-    contact_opened: "Contato aberto",
-    status_changed: "Status alterado",
-    appointment_created: "Reunião agendada",
-    result_recorded: "Resultado registrado",
-  };
-  return labels[type] || type.replaceAll("_", " ");
+function ChannelStatus({ channel }: { channel: WhatsAppChannelRow }) {
+  const label = { connected: "Conectado", connecting: "Conectando", setup_required: "Configurar", paused: "Pausado", error: "Com erro" }[channel.status];
+  return <span className={`inbox-status ${channel.status}`}><i />{label}</span>;
 }
 
 export function ProspecRealHome() {
-  const [snapshot, setSnapshot] = useState<FullRealDataSnapshot>(EMPTY);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-  const [selectedContactId, setSelectedContactId] = useState<string | null>(null);
-  const [selectedChipId, setSelectedChipId] = useState<string | null>(null);
+  const [channels, setChannels] = useState<WhatsAppChannelRow[]>([]);
+  const [conversations, setConversations] = useState<ConversationRow[]>([]);
+  const [messages, setMessages] = useState<MessageRow[]>([]);
+  const [channelId, setChannelId] = useState("");
+  const [conversationId, setConversationId] = useState("");
   const [search, setSearch] = useState("");
-  const [templateCategory, setTemplateCategory] = useState("Todos");
+  const [draft, setDraft] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [sending, setSending] = useState(false);
+  const [error, setError] = useState("");
+
+  async function refresh() {
+    const data = await loadInbox();
+    setChannels(data.channels);
+    setConversations(data.conversations);
+    setChannelId((current) => current || data.channels[0]?.id || "");
+    setConversationId((current) => current || data.conversations[0]?.id || "");
+  }
 
   useEffect(() => {
-    let mounted = true;
-    loadRealDataSnapshot()
-      .then((data) => {
-        if (!mounted) return;
-        setSnapshot(data);
-        setSelectedContactId(data.contacts[0]?.id ?? null);
-        setSelectedChipId(data.chips.find((item) => item.status === "active")?.id ?? data.chips[0]?.id ?? null);
-      })
-      .catch((reason: unknown) => mounted && setError(reason instanceof Error ? reason.message : "Falha ao carregar o CRM."))
-      .finally(() => mounted && setLoading(false));
-    return () => { mounted = false; };
-  }, []);
+    refresh().catch((reason) => setError(reason.message)).finally(() => setLoading(false));
+    const realtime = supabase.channel("crm-inbox")
+      .on("postgres_changes", { event: "*", schema: "public", table: "conversations" }, () => void refresh())
+      .on("postgres_changes", { event: "*", schema: "public", table: "messages" }, (payload) => {
+        const row = payload.new as MessageRow;
+        if (row?.conversation_id === conversationId) void loadMessages(conversationId).then(setMessages);
+      }).subscribe();
+    return () => { void supabase.removeChannel(realtime); };
+  }, [conversationId]);
 
-  const filteredContacts = useMemo(() => snapshot.contacts.filter((item) => {
-    const list = snapshot.lists.find((entry) => entry.id === item.list_id);
-    return `${item.full_name} ${item.company || ""} ${list?.name || ""} ${item.current_result || ""}`.toLowerCase().includes(search.toLowerCase());
-  }), [snapshot.contacts, snapshot.lists, search]);
+  useEffect(() => {
+    if (!conversationId) return setMessages([]);
+    loadMessages(conversationId).then(setMessages).catch((reason) => setError(reason.message));
+  }, [conversationId]);
 
-  const selectedContact = snapshot.contacts.find((item) => item.id === selectedContactId) ?? filteredContacts[0] ?? snapshot.contacts[0] ?? null;
-  const selectedChip = snapshot.chips.find((item) => item.id === selectedChipId) ?? snapshot.chips[0] ?? null;
-  const selectedList = selectedContact ? snapshot.lists.find((item) => item.id === selectedContact.list_id) : null;
-  const contactPhone = selectedContact ? snapshot.contactPhones.find((item) => item.contact_id === selectedContact.id && item.is_primary) ?? snapshot.contactPhones.find((item) => item.contact_id === selectedContact.id) : null;
-  const contactEvents = selectedContact ? snapshot.contactEvents.filter((item) => item.contact_id === selectedContact.id).slice(0, 8) : [];
-  const templates = snapshot.templates.filter((item) => item.active && (templateCategory === "Todos" || (item.category || "Sem categoria") === templateCategory)).slice(0, 6);
-  const categories = ["Todos", ...Array.from(new Set(snapshot.templates.map((item) => item.category || "Sem categoria")))];
-  const unreadNotifications = snapshot.notifications.filter((item) => !item.read_at && !item.archived_at).length;
-  const chipStats = selectedChip ? snapshot.chipDailyStats.filter((item) => item.chip_id === selectedChip.id) : [];
-  const todayStats = chipStats[0];
-  const health = selectedChip ? Math.max(0, 100 - selectedChip.health_score) : 0;
-  const scheduled = snapshot.appointments.filter((item) => item.status === "scheduled").length;
-  const completed = snapshot.appointments.filter((item) => item.status === "completed").length;
+  const selectedChannel = channels.find((item) => item.id === channelId) ?? null;
+  const visible = useMemo(() => conversations.filter((item) =>
+    (!channelId || item.channel_id === channelId) &&
+    `${item.display_name ?? ""} ${item.remote_wa_id} ${item.last_message_preview ?? ""}`.toLowerCase().includes(search.toLowerCase())
+  ), [conversations, channelId, search]);
+  const selected = conversations.find((item) => item.id === conversationId) ?? visible[0] ?? null;
 
-  if (loading) return <main className="prospec-app crm-state"><section className="prospec-card"><h1>Carregando o CRM...</h1><p>Organizando contatos, chips, modelos, agenda e indicadores.</p></section></main>;
-  if (error) return <main className="prospec-app crm-state"><section className="prospec-card"><h1>Não foi possível abrir o CRM</h1><p>{error}</p></section></main>;
+  async function send(event: FormEvent) {
+    event.preventDefault();
+    if (!selected || !draft.trim()) return;
+    setSending(true);
+    setError("");
+    try {
+      const message = await sendWhatsAppMessage(selected.id, draft.trim());
+      setMessages((current) => [...current, message]);
+      setDraft("");
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Falha no envio.");
+    } finally {
+      setSending(false);
+    }
+  }
 
   return (
-    <main className="prospec-app crm-shell">
-      <aside className="crm-sidebar">
+    <main className="prospec-app option1-shell">
+      <aside className="option1-nav">
         <div className="crm-logo"><span>PROSPEC</span><strong>KR</strong></div>
         <nav>
-          <a className="is-active" href="#atendimento">⌂ <span>Atendimento<small>Converse e avance</small></span></a>
-          <a href="#inicio">⌁ <span>Início<small>Visão geral</small></span></a>
-          <a href="./listas-contatos">☷ <span>Listas e Contatos<small>Suas listas e leads</small></span></a>
-          <a href="#modelos">▣ <span>Modelos<small>Mensagens e áudios</small></span></a>
-          <a href="./agenda">□ <span>Agendamentos<small>Compromissos</small></span></a>
-          <a href="./relatorios">▥ <span>Relatórios<small>Desempenho</small></span></a>
-          <a href="./chips-usuarios">◉ <span>Chips<small>Gerencie seus chips</small></span></a>
-          <a href="#configuracoes">⚙ <span>Configurações<small>Preferências</small></span></a>
+          <a className="is-active" href="./inicio"><b>◉</b><span>Atendimento<small>Caixa de entrada</small></span></a>
+          <a href="./funis"><b>⌁</b><span>Funis<small>Etapas e oportunidades</small></span></a>
+          <a href="./listas-contatos"><b>☷</b><span>Listas e contatos<small>Base comercial</small></span></a>
+          <a href="./agenda"><b>□</b><span>Agenda<small>Atividades e reuniões</small></span></a>
+          <a href="./relatorios"><b>▥</b><span>Relatórios<small>Métricas reais</small></span></a>
+          <a href="./chips-usuarios"><b>♙</b><span>Equipe e canais<small>Cargos e permissões</small></span></a>
         </nav>
-        <section className="crm-health-card">
-          <span>SAÚDE DO CHIP ATUAL</span>
-          <div className="crm-health-ring" style={{ "--health": `${health * 3.6}deg` } as React.CSSProperties}><strong>{health}%</strong><small>{health >= 80 ? "Saudável" : health >= 60 ? "Atenção" : "Alto risco"}</small></div>
-          <div><small>Mensagens hoje</small><strong>{todayStats?.messages_sent ?? 0}</strong></div>
-          <div><small>Respostas</small><strong>{todayStats?.replies_received ?? 0}</strong></div>
-          <button>Ver detalhes do chip</button>
-        </section>
+        <a className="option1-settings" href="./configuracoes">⚙ Configurações</a>
       </aside>
 
-      <section className="crm-workspace">
-        <header className="crm-topbar">
-          <div><span>ATENDIMENTO</span><small>Converse, envie mensagens e avance na prospecção</small></div>
-          <div className="crm-chip-picker"><small>Chip ativo</small><select value={selectedChipId ?? ""} onChange={(event) => setSelectedChipId(event.target.value)}>{snapshot.chips.map((chip) => <option key={chip.id} value={chip.id}>{chip.name} · {chip.number}</option>)}</select></div>
-          <button className="crm-swap-chip">⇄ Trocar chip</button>
-          <div className="crm-top-icons"><button>⌕</button><button>♧<b>{unreadNotifications}</b></button><button>▥</button><span className="crm-user">TK</span></div>
+      <section className="option1-app">
+        <header className="option1-topbar">
+          <div><p>CENTRAL DE ATENDIMENTO</p><h1>Conversas</h1></div>
+          <div className="option1-channel">
+            <label>CANAL ATIVO</label>
+            <select value={channelId} onChange={(event) => setChannelId(event.target.value)}>
+              {!channels.length && <option value="">Nenhum WhatsApp conectado</option>}
+              {channels.map((item) => <option key={item.id} value={item.id}>{item.name} · {item.phone_number}</option>)}
+            </select>
+            {selectedChannel && <ChannelStatus channel={selectedChannel} />}
+          </div>
+          <button className="option1-new">＋ Nova conversa</button>
+          <button className="option1-bell">♧</button>
+          <span className="option1-user">TK</span>
         </header>
 
-        <section className="crm-main-grid">
-          <aside className="crm-conversations">
-            <div className="crm-panel-title"><div><strong>CONVERSAS DO DIA</strong><small>{new Intl.DateTimeFormat("pt-BR").format(new Date())}</small></div><span>{filteredContacts.length}</span></div>
-            <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Buscar contato..." />
-            <div className="crm-filters"><button className="active">Todas {filteredContacts.length}</button><button>Com resposta</button><button>Sem resposta</button></div>
-            <div className="crm-contact-list">
-              {filteredContacts.slice(0, 20).map((contact) => {
-                const list = snapshot.lists.find((item) => item.id === contact.list_id);
-                return <button key={contact.id} className={selectedContact?.id === contact.id ? "is-selected" : ""} onClick={() => setSelectedContactId(contact.id)}><span className="crm-avatar">{initials(contact.full_name)}</span><div><strong>{contact.full_name}</strong><small>{contact.company || list?.name || "Sem empresa"}</small><em>{contact.current_result || contact.queue_status}</em></div><time>{formatTime(contact.last_activity_at)}</time></button>;
-              })}
-            </div>
-            <button className="crm-history-button">Ver histórico completo</button>
+        {error && <div className="option1-error">{error}<button onClick={() => setError("")}>×</button></div>}
+
+        <div className="option1-grid">
+          <aside className="option1-conversations">
+            <header><div><strong>CAIXA DE ENTRADA</strong><small>{visible.length} conversas</small></div><button>☷</button></header>
+            <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Buscar nome, número ou mensagem" />
+            <div className="option1-filter"><button className="active">Todas</button><button>Não lidas</button><button>Minhas</button></div>
+            <section>
+              {loading ? <p className="option1-muted">Carregando conversas...</p> : visible.map((item) =>
+                <button key={item.id} className={selected?.id === item.id ? "selected" : ""} onClick={() => setConversationId(item.id)}>
+                  <span>{initials(item.display_name || item.remote_wa_id)}</span>
+                  <div><strong>{item.display_name || item.remote_wa_id}</strong><small>{item.last_message_preview || "Conversa iniciada"}</small></div>
+                  <time>{time(item.last_message_at)}{item.unread_count > 0 && <b>{item.unread_count}</b>}</time>
+                </button>
+              )}
+              {!loading && !visible.length && <div className="option1-empty-list"><b>✦</b><strong>Sua caixa está vazia</strong><p>As conversas reais aparecerão aqui assim que um canal receber mensagens.</p></div>}
+            </section>
           </aside>
 
-          <section className="crm-chat">
-            {selectedContact ? <>
-              <header className="crm-chat-header"><span className="crm-avatar large">{initials(selectedContact.full_name)}</span><div><strong>{selectedContact.full_name}</strong><small>{contactPhone?.phone || "Sem telefone"}</small><div><em>{selectedList?.name || "Sem lista"}</em><em>{selectedContact.current_result || selectedContact.queue_status}</em></div></div><nav><button>☆</button><button>☎</button><button>⋮</button></nav></header>
-              <div className="crm-messages">
-                <div className="crm-day-pill">Hoje</div>
-                <article className="received"><span className="crm-avatar">{initials(selectedContact.full_name)}</span><p>Olá, recebi sua mensagem. Pode me explicar melhor?</p><time>09:41</time></article>
-                <article className="sent"><p>Bom dia, {selectedContact.first_name || selectedContact.full_name.split(" ")[0]}! Claro, posso sim te explicar.</p><time>09:42 ✓✓</time></article>
-                <article className="audio"><button>▶</button><div><span>▁▂▃▅▇▆▃▂▅▇▆▅▃▁</span><small>00:27</small></div><time>09:42 ✓✓</time></article>
-                <article className="received"><span className="crm-avatar">{initials(selectedContact.full_name)}</span><p>Entendi, faz sentido. Vamos agendar uma reunião?</p><time>09:43</time></article>
+          <section className="option1-chat">
+            {selected ? <>
+              <header><span>{initials(selected.display_name || selected.remote_wa_id)}</span><div><h2>{selected.display_name || selected.remote_wa_id}</h2><small>+{selected.remote_wa_id} · WhatsApp</small></div><button>☆</button><button>⋮</button></header>
+              <div className="option1-messages">
+                <div className="option1-day">Hoje</div>
+                {messages.map((item) => <article key={item.id} className={item.direction}>
+                  {item.message_type === "audio" ? <div className="option1-audio">▶ <span>▁▃▆▅▂▇▆▃▁</span></div> : <p>{item.body}</p>}
+                  <time>{time(item.created_at)} {item.direction === "outbound" && (item.status === "read" ? "✓✓" : "✓")}</time>
+                  {item.status === "failed" && <em>{item.error_message || "Falha no envio"}</em>}
+                </article>)}
               </div>
-              <section className="crm-composer" id="modelos">
-                <div className="crm-compose-tabs"><button>Mensagem</button><button className="active">Áudio</button></div>
-                <input placeholder="Buscar modelo de áudio..." />
-                <div className="crm-template-filters">{categories.slice(0, 6).map((category) => <button className={templateCategory === category ? "active" : ""} key={category} onClick={() => setTemplateCategory(category)}>{category}</button>)}</div>
-                <div className="crm-template-grid"><div>{templates.length ? templates.map((template, index) => <article key={template.id}><button>▶</button><strong>{String(index + 1).padStart(2, "0")} · {template.name}</strong><small>{template.category || "Sem categoria"}</small><span>▁▃▆▅▂▇▆▃▁</span><button>⋮</button></article>) : <p>Nenhum modelo ativo nesta categoria.</p>}</div><aside><div>🎙</div><strong>Gravar áudio</strong><small>ou selecione um arquivo</small><button>Selecionar arquivo</button></aside></div>
-                <footer><button>☺</button><button>⌕</button><button>{`{NOME}`}</button><button>{`{EMPRESA}`}</button><div /><button>Enviar</button><button>➤</button></footer>
-              </section>
-            </> : <div className="crm-empty"><h2>Nenhum contato disponível</h2><p>Importe ou distribua uma lista para começar.</p></div>}
+              <form className="option1-composer" onSubmit={send}>
+                <nav><button type="button">Modelos</button><button type="button">Áudios</button><button type="button">Anexos</button></nav>
+                <textarea value={draft} onChange={(event) => setDraft(event.target.value)} placeholder="Escreva uma mensagem... Use {NOME} ou {EMPRESA}" />
+                <footer><button type="button">☺</button><button type="button">📎</button><button type="button">🎙</button><span /><button disabled={sending || selectedChannel?.status !== "connected"}>{sending ? "Enviando..." : "Enviar ➤"}</button></footer>
+              </form>
+            </> : <div className="option1-empty-chat"><div>◉</div><h2>Central pronta para conversas reais</h2><p>Conecte uma conta da WhatsApp Business Platform para enviar e receber mensagens dentro do PROSPEC KR.</p><a href="./chips-usuarios">Configurar primeiro canal</a><small>O histórico será salvo automaticamente no Supabase.</small></div>}
           </section>
 
-          <aside className="crm-contact-card">
-            {selectedContact ? <>
-              <section><div className="crm-profile-avatar">{initials(selectedContact.full_name)}</div><h2>{selectedContact.full_name}</h2><p>{contactPhone?.phone || "Sem telefone"}</p><dl><div><dt>Empresa</dt><dd>{selectedContact.company || "Não informada"}</dd></div><div><dt>Origem</dt><dd>{selectedList?.name || "Não informada"}</dd></div><div><dt>Status atual</dt><dd>{selectedContact.current_result || selectedContact.queue_status}</dd></div><div><dt>Próximo contato</dt><dd>{snapshot.appointments.find((item) => item.contact_id === selectedContact.id)?.starts_at ? formatTime(snapshot.appointments.find((item) => item.contact_id === selectedContact.id)?.starts_at) : "Não agendado"}</dd></div></dl><button>Ver cartão completo →</button></section>
-              <section><header><strong>HISTÓRICO DE INTERAÇÕES</strong><button>Ver todos</button></header>{contactEvents.length ? contactEvents.map((event) => <article key={event.id}><span>◫</span><div><strong>{eventLabel(event.event_type)}</strong><small>{new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "short" }).format(new Date(event.created_at))}</small></div><em>✓</em></article>) : <p>Sem interações registradas.</p>}</section>
-              <section><strong>AÇÕES RÁPIDAS</strong><div className="crm-actions"><button>Agendar reunião</button><button>Adicionar lembrete</button><button>Transferir contato</button><button>Abrir no WhatsApp</button><button>Ver no CRM</button><button>Ver histórico</button></div></section>
-            </> : null}
+          <aside className="option1-details">
+            <header><strong>DETALHES</strong><button>×</button></header>
+            {selected ? <><section className="option1-person"><span>{initials(selected.display_name || selected.remote_wa_id)}</span><h2>{selected.display_name || "Contato sem nome"}</h2><p>+{selected.remote_wa_id}</p><button>Editar contato</button></section><dl><div><dt>Status</dt><dd>{selected.status}</dd></div><div><dt>Responsável</dt><dd>{selected.assigned_to ? "Pessoa designada" : "Não atribuído"}</dd></div><div><dt>Canal</dt><dd>{selectedChannel?.name || "WhatsApp"}</dd></div></dl><section><strong>AÇÕES</strong><button>Adicionar ao funil</button><button>Agendar atividade</button><button>Transferir atendimento</button><button>Encerrar conversa</button></section></> :
+            <div className="option1-empty-details"><b>⌁</b><p>Selecione uma conversa para ver contato, responsável, funil e histórico.</p></div>}
           </aside>
-        </section>
-
-        <footer className="crm-metrics-bar">
-          <article><span>Primeiras mensagens</span><strong>{todayStats?.messages_sent ?? 0}</strong><small>Hoje</small><div>▁▂▃▄▆▅▇</div></article>
-          <article><span>Com resposta</span><strong>{todayStats?.replies_received ?? 0}</strong><small>Hoje</small><div>▁▃▅▄▆▇</div></article>
-          <article><span>Sem resposta</span><strong>{Math.max(0, (todayStats?.messages_sent ?? 0) - (todayStats?.replies_received ?? 0))}</strong><small>Hoje</small><div>▁▂▂▄▃▆</div></article>
-          <article><span>Áudios enviados</span><strong>{todayStats?.audios_sent ?? 0}</strong><small>Hoje</small><div>▁▃▆▅▇</div></article>
-          <article><span>Agendamentos</span><strong>{scheduled}</strong><small>Total</small><div>▁▂▄▅▇</div></article>
-          <article><span>Reuniões realizadas</span><strong>{completed}</strong><small>Total</small><div>▁▃▄▆▅</div></article>
-          <button>Ver relatórios completos</button>
-        </footer>
+        </div>
       </section>
     </main>
   );
