@@ -604,7 +604,7 @@ async function inviteUser(profile: Json, payload: Json) {
   requireAdmin(profile);
   const email = cleanEmail(String(payload.email ?? ""));
   const fullName = String(payload.fullName ?? "").trim();
-  const role = payload.role === "admin" ? "admin" : "lawyer";
+  const role = payload.role === "admin" ? "admin" : "member";
   if (!email || !fullName) throw new Error("Informe nome e e-mail.");
   const { data: old } = await admin
     .from("user_invitations")
@@ -622,6 +622,7 @@ async function inviteUser(profile: Json, payload: Json) {
         accepted_by: null,
         accepted_at: null,
         invited_by: profile.id,
+        job_title: payload.jobTitle || null,
         created_at: new Date().toISOString(),
       })
       .eq("id", old.id);
@@ -634,6 +635,7 @@ async function inviteUser(profile: Json, payload: Json) {
       honorific: payload.honorific || null,
       active: true,
       invited_by: profile.id,
+      job_title: payload.jobTitle || null,
     });
     if (error) throw error;
   }
@@ -641,7 +643,7 @@ async function inviteUser(profile: Json, payload: Json) {
     Deno.env.get("APP_URL") ?? "https://thainakr.github.io/prospec-kr/";
   const { error: inviteError } = await admin.auth.admin.inviteUserByEmail(email, {
     redirectTo,
-    data: { full_name: fullName, role, honorific: payload.honorific || null },
+    data: { full_name: fullName, role, honorific: payload.honorific || null, job_title: payload.jobTitle || null },
   });
   if (inviteError && !/already.*registered|already.*been registered/i.test(inviteError.message)) {
     throw new Error(`O convite foi salvo, mas o e-mail não pôde ser enviado: ${inviteError.message}`);
@@ -656,7 +658,7 @@ async function updateUser(profile: Json, payload: Json) {
   const status = ["active", "pending", "blocked"].includes(String(payload.status))
     ? String(payload.status)
     : "active";
-  const role = payload.role === "admin" ? "admin" : "lawyer";
+  const role = payload.role === "admin" ? "admin" : "member";
   const active = status === "active";
   const { error: profileError } = await admin
     .from("profiles")
