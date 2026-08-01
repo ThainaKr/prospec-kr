@@ -39,7 +39,7 @@ type DailyStat = {
   usage_minutes: number;
 };
 
-type InviteRole = "lawyer" | "admin";
+type InviteRole = "member" | "admin";
 type InvitePermissionKey =
   | "can_view_home"
   | "can_view_agenda"
@@ -75,7 +75,7 @@ const PERMISSION_OPTIONS: Array<{ key: InvitePermissionKey; label: string; route
   { key: "can_view_settings", label: "Configurações", route: "/configuracoes" },
 ];
 
-const LAWYER_DEFAULTS: Record<InvitePermissionKey, boolean> = {
+const MEMBER_DEFAULTS: Record<InvitePermissionKey, boolean> = {
   can_view_home: false,
   can_view_agenda: true,
   can_view_lists: false,
@@ -120,9 +120,10 @@ export function ProspecChipsUsersReal() {
   const [inviteOpen, setInviteOpen] = useState(false);
   const [inviteName, setInviteName] = useState("");
   const [inviteEmail, setInviteEmail] = useState("");
-  const [inviteHonorific, setInviteHonorific] = useState("Dr.");
-  const [inviteRole, setInviteRole] = useState<InviteRole>("lawyer");
-  const [invitePermissions, setInvitePermissions] = useState<Record<InvitePermissionKey, boolean>>(LAWYER_DEFAULTS);
+  const [inviteHonorific, setInviteHonorific] = useState("");
+  const [inviteJobTitle, setInviteJobTitle] = useState("");
+  const [inviteRole, setInviteRole] = useState<InviteRole>("member");
+  const [invitePermissions, setInvitePermissions] = useState<Record<InvitePermissionKey, boolean>>(MEMBER_DEFAULTS);
   const [landingRoute, setLandingRoute] = useState("/agenda");
   const [inviteBusy, setInviteBusy] = useState(false);
   const [inviteMessage, setInviteMessage] = useState("");
@@ -179,7 +180,7 @@ export function ProspecChipsUsersReal() {
 
   function changeInviteRole(role: InviteRole) {
     setInviteRole(role);
-    const defaults = role === "admin" ? ADMIN_DEFAULTS : LAWYER_DEFAULTS;
+    const defaults = role === "admin" ? ADMIN_DEFAULTS : MEMBER_DEFAULTS;
     setInvitePermissions(defaults);
     setLandingRoute(role === "admin" ? "/inicio" : "/agenda");
   }
@@ -209,6 +210,7 @@ export function ProspecChipsUsersReal() {
         fullName,
         email,
         honorific: inviteHonorific.trim() || null,
+        jobTitle: inviteJobTitle.trim() || null,
         role: inviteRole,
         permissions: invitePermissions,
         landingRoute,
@@ -216,9 +218,10 @@ export function ProspecChipsUsersReal() {
       setInviteMessage(result.email_sent ? `Convite enviado para ${result.email}.` : `Convite salvo para ${result.email}. O e-mail não foi reenviado porque a conta já existe.`);
       setInviteName("");
       setInviteEmail("");
-      setInviteHonorific("Dr.");
-      setInviteRole("lawyer");
-      setInvitePermissions(LAWYER_DEFAULTS);
+      setInviteHonorific("");
+      setInviteJobTitle("");
+      setInviteRole("member");
+      setInvitePermissions(MEMBER_DEFAULTS);
       setLandingRoute("/agenda");
       const refreshed = await loadRealDataSnapshot();
       setSnapshot(refreshed);
@@ -276,7 +279,7 @@ export function ProspecChipsUsersReal() {
           <section className="all-screens-grid">
             <article className="prospec-card premium-card panel">
               <div className="section-heading-row"><h2>Usuários reais</h2><small>{filteredUsers.length} encontrado(s)</small></div>
-              {filteredUsers.length ? filteredUsers.map((item) => <div className="contact-line" key={item.id}><span className="prospec-avatar">{item.full_name.split(" ").map((part) => part[0]).slice(0,2).join("")}</span><div><strong>{item.honorific ? `${item.honorific} ` : ""}{item.full_name}</strong><small>{item.email || "E-mail não informado"}</small></div><em>{item.role === "admin" ? "Administrador" : "Advogado"} · {userStatusLabel(item.status)}</em></div>) : <p>Nenhum usuário encontrado.</p>}
+              {filteredUsers.length ? filteredUsers.map((item) => <div className="contact-line" key={item.id}><span className="prospec-avatar">{item.full_name.split(" ").map((part) => part[0]).slice(0,2).join("")}</span><div><strong>{item.honorific ? `${item.honorific} ` : ""}{item.full_name}</strong><small>{item.email || "E-mail não informado"}</small></div><em>{item.role === "admin" ? "Administrador" : item.job_title || "Membro da equipe"} · {userStatusLabel(item.status)}</em></div>) : <p>Nenhum usuário encontrado.</p>}
             </article>
             <article className="prospec-card premium-card panel">
               <h2>Fluxo de acesso</h2>
@@ -289,8 +292,9 @@ export function ProspecChipsUsersReal() {
                 <form className="prospec-invite-form" onSubmit={submitInvite}>
                   <label>Nome completo<input value={inviteName} onChange={(event) => setInviteName(event.target.value)} placeholder="Nome do usuário" autoComplete="name" /></label>
                   <label>E-mail<input type="email" value={inviteEmail} onChange={(event) => setInviteEmail(event.target.value)} placeholder="usuario@empresa.com" autoComplete="email" /></label>
-                  <label>Tratamento<input value={inviteHonorific} onChange={(event) => setInviteHonorific(event.target.value)} placeholder="Dr. ou Dra." /></label>
-                  <label>Perfil<select value={inviteRole} onChange={(event) => changeInviteRole(event.target.value as InviteRole)}><option value="lawyer">Advogado</option><option value="admin">Administrador</option></select></label>
+                  <label>Tratamento opcional<input value={inviteHonorific} onChange={(event) => setInviteHonorific(event.target.value)} placeholder="Ex.: Dr., Dra., Sr., Sra." /></label>
+                  <label>Cargo<input value={inviteJobTitle} onChange={(event) => setInviteJobTitle(event.target.value)} placeholder="Ex.: Vendedor, Advogado, Consultor" required /></label>
+                  <label>Nível de acesso<select value={inviteRole} onChange={(event) => changeInviteRole(event.target.value as InviteRole)}><option value="member">Membro da equipe</option><option value="admin">Administrador</option></select></label>
                   <fieldset className="prospec-permissions-grid">
                     <legend>Páginas e acessos</legend>
                     {PERMISSION_OPTIONS.map((item) => (
