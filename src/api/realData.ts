@@ -46,15 +46,20 @@ export interface RealDataSnapshot {
   profiles: ProfileRow[];
   lists: ContactListRow[];
   contacts: ContactRow[];
-  contactPhones: ContactPhoneRow[];
-  contactEvents: ContactEventRow[];
   recoveries: RecoveryRow[];
   appointments: AppointmentRow[];
   notifications: NotificationRow[];
   chips: ChipRow[];
-  chipDailyStats: ChipDailyStatRow[];
   templates: MessageTemplateRow[];
 }
+
+export interface CrmDataSnapshot {
+  contactPhones: ContactPhoneRow[];
+  contactEvents: ContactEventRow[];
+  chipDailyStats: ChipDailyStatRow[];
+}
+
+export type FullRealDataSnapshot = RealDataSnapshot & CrmDataSnapshot;
 
 async function selectOrThrow<T>(table: string, columns: string, options?: { limit?: number; order?: { column: string; ascending?: boolean } }) {
   let query = supabase.from(table).select(columns);
@@ -65,7 +70,7 @@ async function selectOrThrow<T>(table: string, columns: string, options?: { limi
   return (data ?? []) as T[];
 }
 
-export async function loadRealDataSnapshot(): Promise<RealDataSnapshot> {
+export async function loadRealDataSnapshot(): Promise<FullRealDataSnapshot> {
   const [profiles, lists, contacts, contactPhones, contactEvents, recoveries, appointments, notifications, chips, chipDailyStats, templates] = await Promise.all([
     selectOrThrow<ProfileRow>("profiles", "id,full_name,email,role,status,active,honorific,last_access_at", { order: { column: "full_name", ascending: true } }),
     selectOrThrow<ContactListRow>("contact_lists", "id,name,bank,origin_bank,active,paused,last_activity_at", { order: { column: "updated_at" } }),
