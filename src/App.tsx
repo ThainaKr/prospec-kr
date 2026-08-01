@@ -11,6 +11,7 @@ import { ProspecChipIntelligencePreview } from "./ui/ProspecChipIntelligencePrev
 import { ProspecReportsPreview } from "./ui/ProspecReportsPreview";
 import { ProspecNotificationsPreview } from "./ui/ProspecNotificationsPreview";
 import { ProspecAllScreensPreview } from "./ui/ProspecAllScreensPreview";
+import { ProspecRealDataPreview } from "./ui/ProspecRealDataPreview";
 
 function Login() {
   const [email, setEmail] = useState("");
@@ -138,6 +139,10 @@ export default function App() {
 
   if (previewRoute === "/agenda-live") {
     return session ? <ProspecAgendaLive /> : <Login />;
+  }
+
+  if (previewRoute === "/dados-reais-preview") {
+    return session ? <ProspecRealDataPreview /> : <Login />;
   }
 
   return session ? <ProspecDashboard session={session} /> : <Login />;
