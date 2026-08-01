@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
-import { loadRealDataSnapshot, type RealDataSnapshot } from "../api/realData";
+import { loadRealDataSnapshot, type FullRealDataSnapshot } from "../api/realData";
 
-const EMPTY: RealDataSnapshot = {
+const EMPTY: FullRealDataSnapshot = {
   profiles: [], lists: [], contacts: [], contactPhones: [], contactEvents: [], recoveries: [], appointments: [], notifications: [], chips: [], chipDailyStats: [], templates: [],
 };
 
@@ -27,7 +27,7 @@ function eventLabel(type: string) {
 }
 
 export function ProspecRealHome() {
-  const [snapshot, setSnapshot] = useState<RealDataSnapshot>(EMPTY);
+  const [snapshot, setSnapshot] = useState<FullRealDataSnapshot>(EMPTY);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [selectedContactId, setSelectedContactId] = useState<string | null>(null);
