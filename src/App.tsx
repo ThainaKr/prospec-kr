@@ -207,6 +207,7 @@ export default function App() {
   if (route === "/" || route === "/app") return <ProspecDashboard session={session} />;
 
   if (route === "/inicio" || route === "/inicio-real") return <ProspecRealHome />;
+  if (route === "/funis") return <ProspecFunnelPreview />;
   if (route === "/listas-contatos" || route === "/listas-contatos-real") return <ProspecListsContactsReal />;
   if (route === "/agenda" || route === "/agenda-live") return <ProspecAgendaLive />;
   if (route === "/agenda-notificacoes" || route === "/agenda-notificacoes-real") return <ProspecAgendaNotificationsReal />;
