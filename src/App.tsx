@@ -102,9 +102,41 @@ function Login() {
   );
 }
 
-function getPreviewRoute() {
-  return window.location.pathname;
+function Splash() {
+  return (
+    <main className="splash-screen">
+      <div className="brand-mark">KR</div>
+      <h1>PROSPEC KR</h1>
+      <div className="loading-block"><span className="spinner" />Validando seu acesso...</div>
+    </main>
+  );
 }
+
+function NotFound() {
+  return (
+    <main className="prospec-app real-data-state">
+      <section className="prospec-card">
+        <p className="eyebrow">PROSPEC KR</p>
+        <h1>Página não encontrada</h1>
+        <p>O endereço informado não pertence às rotas oficiais do sistema.</p>
+        <button className="prospec-button-primary" onClick={() => { window.location.href = "/"; }}>
+          Voltar ao sistema
+        </button>
+      </section>
+    </main>
+  );
+}
+
+const INTERNAL_PREVIEWS: Record<string, () => JSX.Element> = {
+  "/visual-preview": () => <ProspecThemePreview />,
+  "/agenda-preview": () => <ProspecAgendaPreview />,
+  "/atendimento-preview": () => <ProspecAttendancePreview />,
+  "/funil-preview": () => <ProspecFunnelPreview />,
+  "/chips-inteligencia-preview": () => <ProspecChipIntelligencePreview />,
+  "/relatorios-preview": () => <ProspecReportsPreview />,
+  "/notificacoes-preview": () => <ProspecNotificationsPreview />,
+  "/todas-as-telas-preview": () => <ProspecAllScreensPreview />,
+};
 
 export default function App() {
   const [session, setSession] = useState<Session | null>(null);
@@ -122,53 +154,23 @@ export default function App() {
     return () => data.subscription.unsubscribe();
   }, []);
 
-  const previewRoute = getPreviewRoute();
-  if (previewRoute === "/visual-preview") return <ProspecThemePreview />;
-  if (previewRoute === "/agenda-preview") return <ProspecAgendaPreview />;
-  if (previewRoute === "/atendimento-preview") return <ProspecAttendancePreview />;
-  if (previewRoute === "/funil-preview") return <ProspecFunnelPreview />;
-  if (previewRoute === "/chips-inteligencia-preview") return <ProspecChipIntelligencePreview />;
-  if (previewRoute === "/relatorios-preview") return <ProspecReportsPreview />;
-  if (previewRoute === "/notificacoes-preview") return <ProspecNotificationsPreview />;
-  if (previewRoute === "/todas-as-telas-preview") return <ProspecAllScreensPreview />;
+  if (loading) return <Splash />;
+  if (!session) return <Login />;
 
-  if (loading) {
-    return (
-      <main className="splash-screen">
-        <div className="brand-mark">KR</div>
-        <h1>PROSPEC KR</h1>
-        <div className="loading-block"><span className="spinner" />Validando seu acesso...</div>
-      </main>
-    );
-  }
+  const route = window.location.pathname.replace(/\/+$/, "") || "/";
 
-  if (previewRoute === "/agenda-live") {
-    return session ? <ProspecAgendaLive /> : <Login />;
-  }
+  if (route === "/" || route === "/app") return <ProspecDashboard session={session} />;
 
-  if (previewRoute === "/dados-reais-preview") {
-    return session ? <ProspecRealDataPreview /> : <Login />;
-  }
+  if (route === "/inicio" || route === "/inicio-real") return <ProspecRealHome />;
+  if (route === "/listas-contatos" || route === "/listas-contatos-real") return <ProspecListsContactsReal />;
+  if (route === "/agenda" || route === "/agenda-live") return <ProspecAgendaLive />;
+  if (route === "/agenda-notificacoes" || route === "/agenda-notificacoes-real") return <ProspecAgendaNotificationsReal />;
+  if (route === "/relatorios" || route === "/relatorios-real") return <ProspecReportsReal />;
+  if (route === "/chips-usuarios" || route === "/chips-usuarios-real") return <ProspecChipsUsersReal />;
+  if (route === "/dados-reais") return <ProspecRealDataPreview />;
 
-  if (previewRoute === "/inicio-real") {
-    return session ? <ProspecRealHome /> : <Login />;
-  }
+  const preview = INTERNAL_PREVIEWS[route];
+  if (preview) return preview();
 
-  if (previewRoute === "/listas-contatos-real") {
-    return session ? <ProspecListsContactsReal /> : <Login />;
-  }
-
-  if (previewRoute === "/agenda-notificacoes-real") {
-    return session ? <ProspecAgendaNotificationsReal /> : <Login />;
-  }
-
-  if (previewRoute === "/relatorios-real") {
-    return session ? <ProspecReportsReal /> : <Login />;
-  }
-
-  if (previewRoute === "/chips-usuarios-real") {
-    return session ? <ProspecChipsUsersReal /> : <Login />;
-  }
-
-  return session ? <ProspecDashboard session={session} /> : <Login />;
+  return <NotFound />;
 }
