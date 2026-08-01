@@ -4,7 +4,7 @@ import { viteSingleFile } from "vite-plugin-singlefile";
 
 export default defineConfig({
   plugins: [react(), viteSingleFile()],
-  base: "/prospec-kr/",
+  base: "/",
   build: {
     target: "es2022",
     sourcemap: false,
