@@ -10,6 +10,7 @@ import { ProspecFunnelPreview } from "./ui/ProspecFunnelPreview";
 import { ProspecChipIntelligencePreview } from "./ui/ProspecChipIntelligencePreview";
 import { ProspecReportsPreview } from "./ui/ProspecReportsPreview";
 import { ProspecNotificationsPreview } from "./ui/ProspecNotificationsPreview";
+import { ProspecAllScreensPreview } from "./ui/ProspecAllScreensPreview";
 
 function Login() {
   const [email, setEmail] = useState("");
@@ -123,6 +124,7 @@ export default function App() {
   if (previewRoute === "/chips-inteligencia-preview") return <ProspecChipIntelligencePreview />;
   if (previewRoute === "/relatorios-preview") return <ProspecReportsPreview />;
   if (previewRoute === "/notificacoes-preview") return <ProspecNotificationsPreview />;
+  if (previewRoute === "/todas-as-telas-preview") return <ProspecAllScreensPreview />;
 
   if (loading) {
     return (
