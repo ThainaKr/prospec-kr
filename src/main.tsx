@@ -8,6 +8,7 @@ import "./chipIntelligence.css";
 import "./notificationsTheme.css";
 import "./premiumGlow.css";
 import "./allScreens.css";
+import "./officialTheme.css";
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
