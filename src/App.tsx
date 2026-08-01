@@ -157,15 +157,46 @@ export default function App() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => {
-      setSession(data.session);
-      setLoading(false);
-    });
+    let active = true;
+
+    async function initializeAuth() {
+      try {
+        const url = new URL(window.location.href);
+        const code = url.searchParams.get("code");
+
+        if (code) {
+          const { data, error } = await supabase.auth.exchangeCodeForSession(code);
+          if (error) throw error;
+          if (active) setSession(data.session);
+
+          url.searchParams.delete("code");
+          url.searchParams.delete("state");
+          window.history.replaceState({}, document.title, `${url.pathname}${url.search}${url.hash}`);
+          return;
+        }
+
+        const { data } = await supabase.auth.getSession();
+        if (active) setSession(data.session);
+      } catch (reason) {
+        console.error("Falha ao concluir autenticação:", reason);
+        if (active) setSession(null);
+      } finally {
+        if (active) setLoading(false);
+      }
+    }
+
+    initializeAuth();
     const { data } = supabase.auth.onAuthStateChange((_event, next) => {
-      setSession(next);
-      setLoading(false);
+      if (active) {
+        setSession(next);
+        setLoading(false);
+      }
     });
-    return () => data.subscription.unsubscribe();
+
+    return () => {
+      active = false;
+      data.subscription.unsubscribe();
+    };
   }, []);
 
   if (loading) return <Splash />;
