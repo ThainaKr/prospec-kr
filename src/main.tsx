@@ -7,6 +7,7 @@ import "./funnelTheme.css";
 import "./chipIntelligence.css";
 import "./notificationsTheme.css";
 import "./premiumGlow.css";
+import "./allScreens.css";
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
