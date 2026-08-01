@@ -73,7 +73,13 @@ export interface NotificationRow {
   priority: "low" | "normal" | "high" | "urgent";
   created_at: string;
   read_at: string | null;
+  completed_at: string | null;
+  archived_at: string | null;
+  scheduled_for: string | null;
   action_url: string | null;
+  source_module: string | null;
+  entity_type: string | null;
+  entity_id: string | null;
 }
 
 export interface ChipRow {
