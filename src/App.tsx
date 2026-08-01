@@ -12,6 +12,7 @@ import { ProspecReportsPreview } from "./ui/ProspecReportsPreview";
 import { ProspecNotificationsPreview } from "./ui/ProspecNotificationsPreview";
 import { ProspecAllScreensPreview } from "./ui/ProspecAllScreensPreview";
 import { ProspecRealDataPreview } from "./ui/ProspecRealDataPreview";
+import { ProspecRealHome } from "./ui/ProspecRealHome";
 
 function Login() {
   const [email, setEmail] = useState("");
@@ -143,6 +144,10 @@ export default function App() {
 
   if (previewRoute === "/dados-reais-preview") {
     return session ? <ProspecRealDataPreview /> : <Login />;
+  }
+
+  if (previewRoute === "/inicio-real") {
+    return session ? <ProspecRealHome /> : <Login />;
   }
 
   return session ? <ProspecDashboard session={session} /> : <Login />;
