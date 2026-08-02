@@ -1230,6 +1230,41 @@ button:disabled {
   gap: 9px;
 }
 
+.report-periods {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+}
+
+.report-periods button {
+  flex: 0 0 auto;
+  min-height: 38px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--muted);
+  padding: 8px 14px;
+}
+
+.report-periods button.active {
+  border-color: var(--orange);
+  background: rgba(181, 63, 13, 0.15);
+  color: var(--orange-2);
+}
+
+.settings-card {
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  background: var(--surface);
+  padding: 20px;
+}
+
+.settings-card h2 { margin: 0 0 8px; }
+.settings-card > p:not(.eyebrow) { color: var(--muted); line-height: 1.6; }
+.settings-list { display: grid; gap: 10px; margin-top: 18px; }
+.settings-list span { display: grid; gap: 4px; border: 1px solid #1d2926; border-radius: 13px; background: var(--surface-2); padding: 14px; }
+.settings-list small { color: var(--muted); }
+
 .report-metric {
   position: relative;
   overflow: hidden;
@@ -1682,5 +1717,3 @@ button:disabled {
     font-size: 9px;
   }
 }
-/* CRM Opção 1 — caixa de entrada real */
-.option1-shell{min-height:100vh;display:flex;background:#040606;color:#f6f1eb;font-family:Inter,system-ui,sans-serif}.option1-nav{width:238px;background:#07100f;border-right:1px solid #16302c;padding:25px 16px;display:flex;flex-direction:column;position:sticky;top:0;height:100vh}.option1-nav .crm-logo{padding:0 12px 25px}.option1-nav nav{display:grid;gap:7px}.option1-nav nav a{display:flex;gap:13px;align-items:center;padding:12px;color:#b8c1bd;text-decoration:none;border-radius:11px}.option1-nav nav a:hover,.option1-nav nav a.is-active{background:linear-gradient(90deg,#04332d,#10231f);color:white;box-shadow:inset 3px 0 #b53f0d}.option1-nav nav b{font-size:18px;color:#d77428}.option1-nav nav span{display:grid;font-size:13px;font-weight:700}.option1-nav nav small{font-size:10px;color:#71827d;font-weight:500;margin-top:3px}.option1-settings{margin-top:auto;color:#889792;text-decoration:none;padding:12px}.option1-app{min-width:0;flex:1}.option1-topbar{height:82px;display:flex;align-items:center;gap:18px;padding:0 24px;border-bottom:1px solid #18221f;background:#080d0c}.option1-topbar>div:first-child{margin-right:auto}.option1-topbar p,.option1-channel label{font-size:9px;letter-spacing:1.6px;color:#d77428;font-weight:800;margin:0}.option1-topbar h1{margin:3px 0 0;font-size:22px}.option1-channel{display:grid;grid-template-columns:auto auto;gap:2px 8px;align-items:center}.option1-channel label{grid-column:1/-1;color:#72817c}.option1-channel select{background:#101916;color:#e9eeeb;border:1px solid #26443e;border-radius:8px;padding:9px 34px 9px 10px}.inbox-status{font-size:10px;color:#9eaaa6;display:flex;align-items:center;gap:5px}.inbox-status i{width:7px;height:7px;border-radius:50%;background:#9c7a24}.inbox-status.connected i{background:#55b778;box-shadow:0 0 8px #55b778}.inbox-status.error i{background:#8e2b20}.option1-new{background:#b53f0d;color:white;border:0;border-radius:8px;padding:10px 15px;font-weight:800}.option1-bell{background:transparent;color:#d2dad6;border:1px solid #25322f;border-radius:9px;width:39px;height:39px}.option1-user{width:38px;height:38px;border-radius:50%;display:grid;place-items:center;background:#306d64;font-weight:900}.option1-error{background:#42170f;color:#ffd7cb;border-bottom:1px solid #7b2d1c;padding:9px 18px;font-size:12px}.option1-error button{float:right;background:none;border:0;color:white}.option1-grid{display:grid;grid-template-columns:310px minmax(410px,1fr) 282px;height:calc(100vh - 82px)}.option1-conversations,.option1-details{background:#09100e;border-right:1px solid #1b2825;min-height:0}.option1-conversations>header,.option1-details>header{display:flex;justify-content:space-between;padding:20px;border-bottom:1px solid #19231f}.option1-conversations>header div{display:grid;gap:4px}.option1-conversations>header strong,.option1-details>header strong{font-size:11px;letter-spacing:1.3px}.option1-conversations>header small{font-size:10px;color:#71817b}.option1-conversations>header button,.option1-details>header button{border:0;background:none;color:#7d8b86}.option1-conversations>input{margin:14px;width:calc(100% - 28px);box-sizing:border-box;border:1px solid #22302c;background:#111916;color:white;border-radius:8px;padding:11px}.option1-filter{display:flex;padding:0 14px 12px;gap:5px}.option1-filter button{background:none;border:0;color:#71817c;font-size:10px;padding:7px}.option1-filter button.active{color:#f4b080;border-bottom:2px solid #b53f0d}.option1-conversations>section{overflow:auto;height:calc(100% - 150px)}.option1-conversations>section>button{width:100%;display:grid;grid-template-columns:38px 1fr auto;gap:10px;text-align:left;padding:13px 14px;border:0;border-top:1px solid #121d19;background:transparent;color:white}.option1-conversations>section>button:hover,.option1-conversations>section>button.selected{background:#12231f}.option1-conversations>section>button>span,.option1-chat>header>span{width:38px;height:38px;border-radius:50%;background:#306d64;display:grid;place-items:center;font-size:11px;font-weight:800}.option1-conversations button div{min-width:0;display:grid;gap:4px}.option1-conversations button strong{font-size:12px}.option1-conversations button small{color:#7c8984;font-size:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.option1-conversations time{font-size:9px;color:#77847f;display:grid;justify-items:end;gap:6px}.option1-conversations time b{background:#b53f0d;color:white;border-radius:12px;padding:2px 6px}.option1-empty-list,.option1-empty-chat,.option1-empty-details{padding:40px 28px;text-align:center;color:#788680}.option1-empty-list b,.option1-empty-chat>div{font-size:28px;color:#d77428}.option1-empty-list strong{display:block;color:#d3dad7;margin:12px}.option1-empty-list p,.option1-empty-chat p{font-size:12px;line-height:1.6}.option1-chat{min-width:0;background:radial-gradient(circle at 50% 0,#0e1b18 0,#070b0a 50%);display:flex;flex-direction:column}.option1-chat>header{height:68px;display:flex;align-items:center;gap:10px;padding:0 18px;border-bottom:1px solid #1c2825;background:#0b1210}.option1-chat>header div{margin-right:auto}.option1-chat h2{font-size:13px;margin:0 0 4px}.option1-chat header small{font-size:10px;color:#71817b}.option1-chat header button{background:none;border:0;color:#88958f;font-size:18px}.option1-messages{flex:1;overflow:auto;padding:26px 7%;display:flex;flex-direction:column;gap:9px}.option1-day{align-self:center;background:#14201d;color:#81908a;font-size:9px;padding:5px 11px;border-radius:14px}.option1-messages article{max-width:67%;border-radius:11px;padding:10px 12px;position:relative}.option1-messages article.inbound{align-self:flex-start;background:#17211e}.option1-messages article.outbound{align-self:flex-end;background:#174139}.option1-messages p{font-size:12px;line-height:1.5;margin:0 0 5px}.option1-messages time{display:block;text-align:right;font-size:8px;color:#92a09a}.option1-messages em{font-size:9px;color:#e98c75}.option1-composer{border-top:1px solid #1a2824;background:#0c1412;padding:12px 16px}.option1-composer nav{display:flex;gap:18px}.option1-composer nav button{border:0;background:none;color:#75837e;font-size:10px}.option1-composer nav button:first-child{color:#e69661}.option1-composer textarea{box-sizing:border-box;width:100%;height:58px;resize:none;margin:9px 0;background:#111a17;border:1px solid #24322e;border-radius:8px;color:white;padding:10px}.option1-composer footer{display:flex;gap:7px}.option1-composer footer span{flex:1}.option1-composer footer button{background:transparent;color:#94a09c;border:0}.option1-composer footer button:last-child{background:#b53f0d;color:white;padding:8px 15px;border-radius:7px}.option1-composer footer button:disabled{opacity:.4}.option1-details{border-left:1px solid #1b2825;border-right:0;overflow:auto}.option1-person{text-align:center;padding:24px;border-bottom:1px solid #19231f}.option1-person>span{margin:auto;width:58px;height:58px;display:grid;place-items:center;border-radius:50%;background:#306d64;font-weight:900}.option1-person h2{font-size:15px;margin:12px 0 5px}.option1-person p{font-size:10px;color:#7f8e88}.option1-person button,.option1-empty-chat a{display:inline-block;background:#10251f;color:#e9f1ed;border:1px solid #306d64;border-radius:7px;padding:8px 12px;text-decoration:none}.option1-details dl{padding:13px 20px;border-bottom:1px solid #19231f}.option1-details dl div{display:flex;justify-content:space-between;padding:8px 0}.option1-details dt{font-size:10px;color:#72807b}.option1-details dd{font-size:10px;margin:0;color:#d5dcd8}.option1-details>section:last-child{padding:20px;display:grid;gap:7px}.option1-details>section:last-child strong{font-size:10px;letter-spacing:1px;color:#8c9a95}.option1-details>section:last-child button{background:#101916;border:1px solid #22302c;color:#c8d0cc;text-align:left;border-radius:7px;padding:9px}.option1-empty-chat{margin:auto;max-width:420px}.option1-empty-chat h2{color:#eff3f1;font-size:19px}.option1-empty-chat small{display:block;margin-top:16px;font-size:10px}.option1-muted{padding:20px;color:#788680;font-size:11px}@media(max-width:1100px){.option1-grid{grid-template-columns:290px 1fr}.option1-details{display:none}}@media(max-width:760px){.option1-nav{display:none}.option1-topbar{padding:0 12px}.option1-new,.option1-channel label,.inbox-status{display:none}.option1-grid{grid-template-columns:1fr}.option1-conversations{display:none}.option1-topbar h1{font-size:17px}}
