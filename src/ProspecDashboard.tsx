@@ -3,7 +3,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import type { Session } from "@supabase/supabase-js";
 import * as XLSX from "xlsx";
 import { supabase } from "./supabase";
 import { buildWhatsAppOpeningUrl, openingMethodLabel } from "./whatsappOpening";
@@ -1567,13 +1566,7 @@ function ChipsUsersView({
   );
 }
 
-function ProfileView({
-  profile,
-  onSignOut,
-}: {
-  profile: AnyRecord;
-  onSignOut: () => void;
-}) {
+function ProfileView({ profile }: { profile: AnyRecord }) {
   return (
     <div className="page-stack">
       <section className="profile-card">
@@ -1581,20 +1574,17 @@ function ProfileView({
         <div>
           <p className="eyebrow">MEU PERFIL</p>
           <h2>{profile.full_name}</h2>
-          <p>{profile.email}</p>
+          <p>Sessão administrativa direta</p>
           <span className="status-pill active">
             {profile.role === "admin" ? "Administradora" : "Advogado"}
           </span>
         </div>
       </section>
-      <button className="outline-button full link-button" onClick={onSignOut}>
-        Sair do PROSPEC KR
-      </button>
     </div>
   );
 }
 
-export default function ProspecDashboard({ session }: { session: Session }) {
+export default function ProspecDashboard() {
   const [page, setPage] = useState<PageKey>(pageFromLocation);
   const [bootstrap, setBootstrap] = useState<AnyRecord | null>(null);
   const [loading, setLoading] = useState(true);
@@ -1640,14 +1630,13 @@ export default function ProspecDashboard({ session }: { session: Session }) {
       <main className="login-page">
         <section className="login-card error-card">
           <div className="brand-mark">KR</div>
-          <h1>Acesso ainda não liberado</h1>
-          <p>{fatal || "Não foi possível identificar seu perfil."}</p>
-          <p className="email-chip">{session.user.email}</p>
+          <h1>Não foi possível abrir o PROSPEC KR</h1>
+          <p>{fatal || "A sessão administrativa direta não respondeu."}</p>
           <button
             className="outline-button full link-button"
-            onClick={() => supabase.auth.signOut()}
+            onClick={() => window.location.reload()}
           >
-            Entrar com outro e-mail
+            Tentar novamente
           </button>
         </section>
       </main>
@@ -1661,9 +1650,7 @@ export default function ProspecDashboard({ session }: { session: Session }) {
     home: [
       "Início",
       `Olá, ${firstWord(
-        bootstrap.profile?.full_name ||
-          session.user.user_metadata?.full_name ||
-          session.user.email,
+        bootstrap.profile?.full_name || "Thainá",
       )}.`,
     ],
     notifications: ["Notificações", "Acompanhe tudo que precisa da sua atenção."],
@@ -1719,10 +1706,6 @@ export default function ProspecDashboard({ session }: { session: Session }) {
                 {label}
               </button>
             ))}
-          <button onClick={() => supabase.auth.signOut()}>
-            <span>↪</span>
-            Sair
-          </button>
         </nav>
       </aside>
       {menuOpen ? <button className="drawer-backdrop" onClick={() => setMenuOpen(false)} /> : null}
@@ -1744,10 +1727,7 @@ export default function ProspecDashboard({ session }: { session: Session }) {
           <ChipsUsersView notify={notify} />
         ) : null}
         {activePage === "profile" ? (
-          <ProfileView
-            profile={bootstrap.profile}
-            onSignOut={() => supabase.auth.signOut()}
-          />
+          <ProfileView profile={bootstrap.profile} />
         ) : null}
       </main>
 
