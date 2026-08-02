@@ -9,6 +9,7 @@ import { buildWhatsAppOpeningUrl, openingMethodLabel } from "./whatsappOpening";
 
 type PageKey =
   | "home"
+  | "funnel"
   | "notifications"
   | "agenda"
   | "lists"
@@ -22,6 +23,7 @@ type AnyRecord = Record<string, any>;
 
 const PAGE_PATHS: Record<PageKey, string> = {
   home: "inicio",
+  funnel: "funil",
   notifications: "notificacoes",
   agenda: "agenda",
   lists: "listas-contatos",
@@ -42,6 +44,7 @@ function pageFromLocation(): PageKey {
 
 const ADMIN_NAV: Array<[PageKey, string, string]> = [
   ["home", "Início", "⌂"],
+  ["funnel", "Funil", "▽"],
   ["notifications", "Notificações", "●"],
   ["agenda", "Agenda", "▦"],
   ["lists", "Listas", "☷"],
@@ -51,6 +54,7 @@ const ADMIN_NAV: Array<[PageKey, string, string]> = [
 
 const LAWYER_NAV: Array<[PageKey, string, string]> = [
   ["home", "Início", "⌂"],
+  ["funnel", "Funil", "▽"],
   ["notifications", "Notificações", "●"],
   ["agenda", "Agenda", "▦"],
   ["lists", "Listas", "☷"],
@@ -1331,6 +1335,89 @@ function ReportsView({
   );
 }
 
+const FUNNEL_STAGES = [
+  { key: "new", label: "Novo contato", matches: ["sem resultado", "novo"] },
+  { key: "initial", label: "Contato inicial", matches: ["primeira mensagem", "áudio enviado", "sem resposta"] },
+  { key: "interest", label: "Interesse demonstrado", matches: ["interesse", "retornar depois"] },
+  { key: "meeting", label: "Reunião agendada", matches: ["agendamento", "reunião agendada", "reunião realizada"] },
+  { key: "proposal", label: "Proposta enviada", matches: ["proposta", "contrato enviado"] },
+  { key: "closed", label: "Contrato fechado", matches: ["contrato fechado", "cliente"] },
+];
+
+function funnelStageFor(result?: string) {
+  const normalized = String(result || "Sem resultado").trim().toLocaleLowerCase("pt-BR");
+  return FUNNEL_STAGES.find((stage) =>
+    stage.matches.some((match) => normalized.includes(match)),
+  )?.key || "new";
+}
+
+function FunnelView({ notify }: { notify: (text: string, tone?: "success" | "error") => void }) {
+  const [contacts, setContacts] = useState<AnyRecord[]>([]);
+  const [reports, setReports] = useState<AnyRecord | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState("");
+
+  useEffect(() => {
+    Promise.all([api("contacts", { page: 0, search: "" }), api("reports")])
+      .then(([contactData, reportData]) => {
+        setContacts(contactData?.contacts || []);
+        setReports(reportData || {});
+      })
+      .catch((error) => notify(error instanceof Error ? error.message : "Não foi possível carregar o funil.", "error"))
+      .finally(() => setLoading(false));
+  }, [notify]);
+
+  const visible = useMemo(() => {
+    const term = search.trim().toLocaleLowerCase("pt-BR");
+    if (!term) return contacts;
+    return contacts.filter((contact) =>
+      [contact.full_name, contact.company, contact.current_result].some((value) =>
+        String(value || "").toLocaleLowerCase("pt-BR").includes(term),
+      ),
+    );
+  }, [contacts, search]);
+  const stages = FUNNEL_STAGES.map((stage) => ({
+    ...stage,
+    contacts: visible.filter((contact) => funnelStageFor(contact.current_result) === stage.key),
+  }));
+  const total = Number(reports?.total ?? contacts.length);
+  const closed = stages.find((stage) => stage.key === "closed")?.contacts.length || 0;
+  const conversion = total ? (closed / total) * 100 : 0;
+
+  if (loading) return <LoadingBlock label="Montando o funil..." />;
+  return (
+    <div className="page-stack funnel-page">
+      <section className="funnel-heading-card">
+        <div><p className="eyebrow">GESTÃO DO FUNIL</p><h2>Funis de Atendimento</h2><p>Acompanhe o avanço real dos contatos em cada etapa.</p></div>
+        <div className="funnel-heading-actions"><select defaultValue="principal" aria-label="Selecionar funil"><option value="principal">Funil principal</option></select><button className="primary-button small">+ Novo funil</button></div>
+      </section>
+      <section className="funnel-summary-grid">
+        {[["Total de contatos", total], ["Em andamento", Math.max(0, total - closed)], ["Convertidos", closed], ["Taxa de conversão", `${conversion.toLocaleString("pt-BR", { maximumFractionDigits: 1 })}%`], ["Reuniões", reports?.appointments ?? 0]].map(([label, value]) => (
+          <article className="funnel-summary-card" key={String(label)}><span>{label}</span><strong>{value}</strong><small>Dados atuais do sistema</small></article>
+        ))}
+      </section>
+      <section className="funnel-toolbar-card"><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Buscar contatos, empresas ou etapas..." aria-label="Buscar no funil"/><span>{visible.length} contato(s) exibido(s)</span></section>
+      <section className="funnel-board" aria-label="Etapas do funil">
+        {stages.map((stage, index) => (
+          <article className={`funnel-column stage-${stage.key}`} key={stage.key}>
+            <header><div><b>{index + 1}. {stage.label}</b><small>{stage.contacts.length} contato(s)</small></div><span>{stage.contacts.length}</span></header>
+            <div className="funnel-column-body">
+              {stage.contacts.slice(0, 20).map((contact) => (
+                <button className="funnel-contact-card" key={contact.id}><span className="avatar">{firstWord(contact.full_name).slice(0, 1)}</span><span><strong>{contact.full_name}</strong><small>{contact.company || "Empresa não informada"}</small><em>{contact.current_result || "Novo"}</em></span><b>›</b></button>
+              ))}
+              {!stage.contacts.length ? <div className="funnel-empty-column">Nenhum contato nesta etapa</div> : null}
+            </div>
+          </article>
+        ))}
+      </section>
+      <section className="funnel-analysis-grid">
+        <article className="chart-card"><p className="eyebrow">PERFORMANCE DO FUNIL</p><h2>Contatos por etapa</h2><div className="funnel-bars">{stages.map((stage) => <div key={stage.key}><span>{stage.label}</span><b><i style={{ width: `${total ? Math.max(3, (stage.contacts.length / total) * 100) : 0}%` }}/></b><strong>{stage.contacts.length}</strong></div>)}</div></article>
+        <article className="chart-card funnel-activity-card"><p className="eyebrow">ATIVIDADES RECENTES</p><h2>Últimas movimentações</h2>{contacts.slice(0, 5).map((contact) => <div className="funnel-activity" key={contact.id}><span>◉</span><div><strong>{contact.full_name}</strong><small>{contact.current_result || "Novo contato"}</small></div><time>{formatDate(contact.last_activity_at, false)}</time></div>)}{!contacts.length ? <p className="quiet-row">Nenhuma movimentação registrada.</p> : null}</article>
+      </section>
+    </div>
+  );
+}
+
 function ChipsUsersView({
   notify,
 }: {
@@ -1386,8 +1473,9 @@ function ChipsUsersView({
         await api("invite_user", {
           fullName: form.fullName,
           email: form.email,
-          role: form.role || "lawyer",
+          role: form.role || "member",
           honorific: form.honorific || "Dr(a).",
+          jobTitle: form.jobTitle,
         });
       notify(tab === "chips" ? (form.id ? "Chip atualizado." : "Chip cadastrado.") : "Convite criado para o e-mail.");
       setForm({});
@@ -1509,12 +1597,17 @@ function ChipsUsersView({
                 onChange={(event) => setForm({ ...form, email: event.target.value })}
               />
               <select
-                value={form.role || "lawyer"}
+                value={form.role || "member"}
                 onChange={(event) => setForm({ ...form, role: event.target.value })}
               >
-                <option value="lawyer">Advogado</option>
+                <option value="member">Membro da equipe</option>
                 <option value="admin">Administrador</option>
               </select>
+              <input
+                placeholder="Cargo (ex.: Advogado, Assistente, Comercial)"
+                value={form.jobTitle || ""}
+                onChange={(event) => setForm({ ...form, jobTitle: event.target.value })}
+              />
             </>
           )}
           <button className="outline-button compact" onClick={save}>
@@ -1560,9 +1653,10 @@ function ChipsUsersView({
               <div>
                 <strong>{user.full_name}</strong>
                 <span>{user.email}</span>
+                <small>{user.job_title || (user.role === "admin" ? "Administradora" : "Cargo não informado")}</small>
               </div>
               <span className={`status-pill ${user.status}`}>
-                {user.role === "admin" ? "Administrador" : "Advogado"}
+                {user.role === "admin" ? "Administrador" : "Membro"}
               </span>
             </article>
           ))}
@@ -1572,6 +1666,7 @@ function ChipsUsersView({
               <div>
                 <strong>{invite.full_name}</strong>
                 <span>{invite.email}</span>
+                <small>{invite.job_title || "Cargo não informado"}</small>
               </div>
               <span className="status-pill pending">Convite pendente</span>
             </article>
@@ -1686,6 +1781,7 @@ export default function ProspecDashboard() {
         bootstrap.profile?.full_name || "Thainá",
       )}.`,
     ],
+    funnel: ["Funil", "Acompanhe contatos, avanço e conversão por etapa."],
     notifications: ["Notificações", "Acompanhe tudo que precisa da sua atenção."],
     agenda: ["Agenda", "Reuniões e compromissos da equipe."],
     lists: ["Listas e Contatos", "Gerencie a operação e a Recuperação."],
@@ -1747,6 +1843,7 @@ export default function ProspecDashboard() {
 
       <main className="app-content">
         {activePage === "home" ? <HomeView bootstrap={bootstrap} role={role} notify={notify} /> : null}
+        {activePage === "funnel" ? <FunnelView notify={notify} /> : null}
         {activePage === "notifications" ? <NotificationsView notify={notify} /> : null}
         {activePage === "agenda" ? <AgendaView notify={notify} /> : null}
         {activePage === "lists" ? (
