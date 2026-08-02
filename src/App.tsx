@@ -36,7 +36,21 @@ function Login() {
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
   const [sent, setSent] = useState(false);
-  const [error, setError] = useState("");
+  const [error, setError] = useState(() => {
+    const params = new URLSearchParams(window.location.search);
+    return params.get("error_code") === "otp_expired"
+      ? "Este link já expirou ou foi verificado automaticamente pelo e-mail. Solicite um novo acesso abaixo."
+      : "";
+  });
+
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    const authParams = ["error", "error_code", "error_description"];
+    if (authParams.some((key) => url.searchParams.has(key))) {
+      authParams.forEach((key) => url.searchParams.delete(key));
+      window.history.replaceState({}, document.title, `${url.pathname}${url.search}${url.hash}`);
+    }
+  }, []);
 
   async function sendLink(event: FormEvent) {
     event.preventDefault();
