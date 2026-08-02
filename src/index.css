@@ -40,144 +40,6 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
-/* O aplicativo nasce para celular. A tipografia abaixo evita que o painel
-   vire uma miniatura quando seis itens dividem a largura da tela. */
-@media (max-width: 639px) {
-  body {
-    font-size: 16px;
-  }
-
-  .app-shell {
-    padding-bottom: calc(78px + env(safe-area-inset-bottom));
-  }
-
-  .app-header {
-    min-height: 72px;
-    grid-template-columns: 44px minmax(0, 1fr) 44px;
-    gap: 10px;
-    padding: 10px 14px;
-  }
-
-  .header-copy h1 {
-    font-size: 24px;
-  }
-
-  .header-copy p {
-    font-size: 13px;
-  }
-
-  .app-content {
-    width: 100%;
-    padding: 16px 14px 28px;
-  }
-
-  .page-stack {
-    gap: 16px;
-  }
-
-  .hero-card,
-  .selector-card,
-  .editor-card,
-  .calendar-card,
-  .chart-card,
-  .toolbar-card,
-  .compact-form-card,
-  .profile-card,
-  .notification-section {
-    border-radius: 18px;
-  }
-
-  .hero-card {
-    padding: 18px;
-  }
-
-  .hero-card h2,
-  .editor-card h2,
-  .calendar-card h2,
-  .chart-card h2 {
-    font-size: 20px;
-    line-height: 1.2;
-  }
-
-  .hero-card p:not(.eyebrow),
-  .empty-state p,
-  .profile-card p:not(.eyebrow) {
-    font-size: 14px;
-  }
-
-  .eyebrow,
-  .selector-card label > span,
-  .approach-picker > span,
-  .helper-text,
-  .section-count {
-    font-size: 12px;
-  }
-
-  input,
-  select,
-  textarea,
-  .primary-button,
-  .outline-button,
-  .whatsapp-button,
-  .telegram-button {
-    min-height: 48px;
-    font-size: 15px;
-  }
-
-  .approach-picker button,
-  .segmented-tabs button {
-    min-height: 46px;
-    font-size: 12px;
-  }
-
-  .contact-card-head h3,
-  .list-card h3,
-  .recovery-card h3,
-  .chip-card h3,
-  .empty-state strong {
-    font-size: 16px;
-  }
-
-  .contact-card-head p,
-  .list-card p,
-  .recovery-card p,
-  .chip-card p,
-  .message-preview,
-  .contact-row-main,
-  .appointment-card,
-  .user-row {
-    font-size: 13px;
-  }
-
-  .metric-row span,
-  .contact-meta span,
-  .recovery-details span,
-  .status-pill {
-    font-size: 10px;
-  }
-
-  .bottom-nav {
-    min-height: 70px;
-    padding-top: 7px;
-    padding-bottom: max(8px, env(safe-area-inset-bottom));
-  }
-
-  .bottom-nav button {
-    min-height: 54px;
-    gap: 5px;
-    padding: 5px 2px;
-  }
-
-  .bottom-nav button > span {
-    font-size: 22px;
-  }
-
-  .bottom-nav small {
-    font-size: 9px;
-    line-height: 1.15;
-  }
-}
-
 button,
 input,
 select,
@@ -1855,4 +1717,77 @@ button:disabled {
   .segmented-tabs button {
     font-size: 9px;
   }
+}
+
+/* O aplicativo nasce para celular. Estas regras ficam no fim do arquivo
+   para não serem sobrescritas pelos estilos antigos dos componentes. */
+@media (max-width: 639px) {
+  body { font-size: 16px; }
+  .app-shell { padding-bottom: calc(78px + env(safe-area-inset-bottom)); }
+  .app-header {
+    min-height: 72px;
+    grid-template-columns: 44px minmax(0, 1fr) 44px;
+    gap: 10px;
+    padding: 10px 14px;
+  }
+  .header-copy h1 { font-size: 24px; }
+  .header-copy p { font-size: 13px; }
+  .app-content { width: 100%; padding: 16px 14px 28px; }
+  .page-stack { gap: 16px; }
+  .hero-card,
+  .selector-card,
+  .editor-card,
+  .calendar-card,
+  .chart-card,
+  .toolbar-card,
+  .compact-form-card,
+  .profile-card,
+  .notification-section { border-radius: 18px; }
+  .hero-card { padding: 18px; }
+  .hero-card h2,
+  .editor-card h2,
+  .calendar-card h2,
+  .chart-card h2 { font-size: 20px; line-height: 1.2; }
+  .hero-card p:not(.eyebrow),
+  .empty-state p,
+  .profile-card p:not(.eyebrow) { font-size: 14px; }
+  .eyebrow,
+  .selector-card label > span,
+  .approach-picker > span,
+  .helper-text,
+  .section-count { font-size: 12px; }
+  input,
+  select,
+  textarea,
+  .primary-button,
+  .outline-button,
+  .whatsapp-button,
+  .telegram-button { min-height: 48px; font-size: 15px; }
+  .approach-picker button,
+  .segmented-tabs button { min-height: 46px; font-size: 12px; }
+  .contact-card-head h3,
+  .list-card h3,
+  .recovery-card h3,
+  .chip-card h3,
+  .empty-state strong { font-size: 16px; }
+  .contact-card-head p,
+  .list-card p,
+  .recovery-card p,
+  .chip-card p,
+  .message-preview,
+  .contact-row-main,
+  .appointment-card,
+  .user-row { font-size: 13px; }
+  .metric-row span,
+  .contact-meta span,
+  .recovery-details span,
+  .status-pill { font-size: 10px; }
+  .bottom-nav {
+    min-height: 70px;
+    padding-top: 7px;
+    padding-bottom: max(8px, env(safe-area-inset-bottom));
+  }
+  .bottom-nav button { min-height: 54px; gap: 5px; padding: 5px 2px; }
+  .bottom-nav button > span { font-size: 22px; }
+  .bottom-nav small { font-size: 9px; line-height: 1.15; }
 }
