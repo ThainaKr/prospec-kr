@@ -240,6 +240,7 @@ function HomeView({
   const [composerTab, setComposerTab] = useState<"message" | "audio">("audio");
   const [message, setMessage] = useState("");
   const [mobileMenu, setMobileMenu] = useState(false);
+  const [contactCardOpen, setContactCardOpen] = useState(true);
   const profileName = bootstrap.profile?.full_name || "Thainá Krause";
   const conversations = [
     { name: "Carlos Eduardo Silva", company: "Bradesco Premium", time: "09:42", state: "Primeira mensagem enviada", tone: "green", unread: 2, initials: "CE" },
@@ -287,6 +288,8 @@ function HomeView({
           <div className="health-gauge"><strong>82%</strong><small>Saudável</small></div>
           <label>Mensagens hoje <b>32 / 80</b><i><em style={{ width: "40%" }} /></i></label>
           <label>1ª mensagens <b>18 / 40</b><i><em style={{ width: "45%" }} /></i></label>
+          <label>Follow-up <b>8 / 20</b><i><em style={{ width: "40%" }} /></i></label>
+          <label>Tempo ativo <b>5h 24min</b><i><em style={{ width: "68%" }} /></i></label>
           <button onClick={() => onNavigate("chips-users")}>Ver detalhes do chip</button>
         </section>
       </aside>
@@ -306,7 +309,7 @@ function HomeView({
         <div className="operations-workspace">
           <section className="conversation-column">
             <header><p>ATENDIMENTO</p><h2>CONVERSAS DO DIA</h2><button>≡</button></header>
-            <div className="conversation-filters"><input type="date" defaultValue="2025-05-15"/><input placeholder="⌕  Buscar contato..."/><div><button className="active">Todas <b>32</b></button><button>Com resposta <b>12</b></button><button>Sem resposta <b>20</b></button></div></div>
+            <div className="conversation-filters"><input type="date" defaultValue="2025-05-15"/><input placeholder="⌕  Buscar contato..."/><div><button className="active">Todas <b>32</b></button><button>Com resposta <b>12</b></button><button>Sem resposta <b>20</b></button></div><div className="secondary-conversation-filters"><button>Áudio enviado</button><button>Primeira mensagem</button><button>Agendamento</button></div></div>
             <div className="conversation-list">
               {conversations.map((item, index) => <button key={item.name} className={selectedConversation === index ? "selected" : ""} onClick={() => setSelectedConversation(index)}><span className={`avatar tone-${item.tone}`}>{item.initials}</span><span><strong>{item.name}</strong><small>{item.company}</small><em className={`tone-${item.tone}`}>◆ {item.state}</em></span><time>{item.time}</time>{item.unread ? <b>{item.unread}</b> : <i>✓</i>}</button>)}
             </div>
@@ -318,19 +321,19 @@ function HomeView({
             <div className="chat-messages"><span className="day-marker">Hoje</span><div className="incoming-message"><b className="avatar tiny-avatar">CE</b><p>Bom dia! Recebi sua mensagem, pode me explicar melhor?<small>09:41</small></p></div><div className="outgoing-message"><p>Bom dia, Carlos! Claro, posso sim te explicar.<small>09:41 ✓✓</small></p></div><div className="outgoing-message audio-bubble"><button>▶</button><div><i className="waveform"/><small>00:27</small></div><time>09:42 ✓✓</time></div><div className="incoming-message"><b className="avatar tiny-avatar">CE</b><p>Entendi, faz sentido. Vamos agendar uma reunião?<small>09:43</small></p></div><div className="outgoing-message"><p>Perfeito! Vou verificar alguns horários e te envio.<small>09:43 ✓✓</small></p></div></div>
             <section className="chat-composer">
               <div className="composer-tabs"><button className={composerTab === "message" ? "active" : ""} onClick={() => setComposerTab("message")}>Mensagem</button><button className={composerTab === "audio" ? "active" : ""} onClick={() => setComposerTab("audio")}>Áudio</button></div>
-              {composerTab === "audio" ? <div className="audio-library"><div className="audio-models"><input placeholder="⌕  Buscar modelo de áudio..."/><div className="audio-categories"><button>Todos</button><button className="active">Primeira mensagem</button><button>Apresentação</button><button>Objeções</button><button>Agendamento</button><button>Follow-up</button></div>{audioModels.map(([name,duration]) => <button className="audio-model" key={name}><span>▶</span><b>{name}</b><small>{duration}</small><i className="mini-wave"/>☆ ⋮</button>)}</div><div className="record-audio"><span>♩</span><strong>Gravar áudio</strong><small>ou selecione um arquivo<br/>MP3, M4A ou OGG</small><button>Selecionar arquivo</button></div></div> : <textarea value={message} onChange={(event) => setMessage(event.target.value)} placeholder="Digite sua mensagem..."/>}
+              {composerTab === "audio" ? <div className="audio-library"><div className="audio-models"><input placeholder="⌕  Buscar modelo de áudio..."/><div className="audio-categories"><button>Todos</button><button className="active">Primeira mensagem</button><button>Apresentação</button><button>Objeções</button><button>Agendamento</button><button>Follow-up</button><button>Encerramento</button></div>{audioModels.map(([name,duration]) => <button className="audio-model" key={name}><span>▶</span><b>{name}</b><small>{duration}</small><i className="mini-wave"/>☆ ⋮</button>)}</div><div className="record-audio"><span className="record-microphone"/><strong>Gravar áudio</strong><small>ou selecione um arquivo<br/>Formatos: MP3, M4A, OGG</small><button>Selecionar arquivo</button></div></div> : <textarea value={message} onChange={(event) => setMessage(event.target.value)} placeholder="Digite sua mensagem..."/>}
               <div className="composer-actions"><button>☺</button><button>⌕</button><button onClick={() => setMessage((value) => `${value}{NOME}`)}>{'{NOME}'}</button><button onClick={() => setMessage((value) => `${value}{EMPRESA}`)}>{'{EMPRESA}'}</button><span/><button className="send-message">Enviar ▾</button><button className="send-icon">➤</button></div>
             </section>
           </section>
 
           <aside className="client-panel">
-            <section className="contact-card-panel"><header>CARTÃO DO CONTATO <button>⌃</button></header><div className="contact-portrait"><span className="avatar large-avatar tone-orange">{current.initials}</span><h2>{current.name}</h2><p>+55 11 98765-4321</p></div><dl><div><dt>▤ Empresa</dt><dd>Silva Transportes Ltda</dd></div><div><dt>♙ Cargo</dt><dd>Diretor Financeiro</dd></div><div><dt>⌂ Origem</dt><dd>Bradesco Premium</dd></div><div><dt>◇ Status atual</dt><dd><em>Aguardando resposta</em></dd></div><div><dt>▦ Próximo contato</dt><dd>21/05/2025 · 14:00</dd></div></dl><button className="view-contact">Ver cartão completo →</button></section>
+            <section className={`contact-card-panel ${contactCardOpen ? "expanded" : "collapsed"}`}><header>CARTÃO DO CONTATO <button aria-label={contactCardOpen ? "Fechar cartão do contato" : "Abrir cartão do contato"} aria-expanded={contactCardOpen} onClick={() => setContactCardOpen((open) => !open)}>{contactCardOpen ? "⌃" : "⌄"}</button></header>{contactCardOpen ? <div className="contact-card-content"><div className="contact-portrait"><span className="avatar large-avatar tone-orange">{current.initials}</span><span className="whatsapp-badge">◉</span><h2>{current.name}</h2><p>+55 11 98765-4321</p></div><dl><div><dt>▤ Empresa</dt><dd>Silva Transportes Ltda</dd></div><div><dt>♙ Cargo</dt><dd>Diretor Financeiro</dd></div><div><dt>⌂ Origem</dt><dd>Bradesco Premium · 20/05/2024</dd></div><div><dt>◇ Status atual</dt><dd><em>Aguardando resposta</em></dd></div><div><dt>▦ Próximo contato</dt><dd>21/05/2025 · 14:00</dd></div></dl><button className="view-contact">Ver cartão completo →</button></div> : null}</section>
             <section className="interaction-history"><header>HISTÓRICO DE INTERAÇÕES <button>Ver todos</button></header>{[["♩","Áudio enviado (00:27)","09:42"],["▤","Mensagem enviada","09:41"],["▣","Contato aberto","09:41"]].map(([icon,label,time]) => <div key={label}><span>{icon}</span><p><small>15/05/2025 · {time}</small>{label}</p><b>✓</b></div>)}</section>
             <section className="quick-actions"><header>AÇÕES RÁPIDAS</header><div><button>▦ Agendar reunião</button><button>♧ Adicionar lembrete</button><button>⇄ Transferir contato</button><button>◉ Abrir WhatsApp</button><button>♙ Ver no CRM</button><button>◷ Histórico completo</button></div></section>
           </aside>
         </div>
 
-        <footer className="operations-kpis">{kpis.map(([label,value,detail,tone]) => <article className={`kpi-${tone}`} key={label}><span>{label}</span><strong>{value}</strong><small>{detail}</small><i/></article>)}<button onClick={() => onNavigate("reports")}>▥ Ver relatórios completos</button></footer>
+        <footer className="operations-kpis">{kpis.map(([label,value,detail,tone], index) => <article className={`kpi-${tone}`} key={label}><span>{label}</span><strong>{value}</strong><small>{detail}</small><svg className="kpi-sparkline" viewBox="0 0 150 30" preserveAspectRatio="none" aria-hidden="true"><defs><linearGradient id={`spark-${index}`} x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="currentColor" stopOpacity=".34"/><stop offset="1" stopColor="currentColor" stopOpacity="0"/></linearGradient></defs><path d="M0 25 C8 25 8 18 16 20 S27 26 34 19 S45 12 52 21 S64 27 72 17 S83 10 91 20 S102 26 111 16 S124 10 132 19 S143 23 150 14 L150 30 L0 30Z" fill={`url(#spark-${index})`} stroke="none"/><path d="M0 25 C8 25 8 18 16 20 S27 26 34 19 S45 12 52 21 S64 27 72 17 S83 10 91 20 S102 26 111 16 S124 10 132 19 S143 23 150 14"/></svg></article>)}<button onClick={() => onNavigate("reports")}>▥ Ver relatórios completos</button></footer>
       </section>
     </div>
   );
