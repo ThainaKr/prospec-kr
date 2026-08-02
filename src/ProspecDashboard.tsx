@@ -1203,85 +1203,51 @@ function ReportsView({
   );
 }
 
-const FUNNEL_STAGES = [
-  { key: "new", label: "Novo contato", matches: ["sem resultado", "novo"] },
-  { key: "initial", label: "Contato inicial", matches: ["primeira mensagem", "áudio enviado", "sem resposta"] },
-  { key: "interest", label: "Interesse demonstrado", matches: ["interesse", "retornar depois"] },
-  { key: "meeting", label: "Reunião agendada", matches: ["agendamento", "reunião agendada", "reunião realizada"] },
-  { key: "proposal", label: "Proposta enviada", matches: ["proposta", "contrato enviado"] },
-  { key: "closed", label: "Contrato fechado", matches: ["contrato fechado", "cliente"] },
-];
-
-function funnelStageFor(result?: string) {
-  const normalized = String(result || "Sem resultado").trim().toLocaleLowerCase("pt-BR");
-  return FUNNEL_STAGES.find((stage) =>
-    stage.matches.some((match) => normalized.includes(match)),
-  )?.key || "new";
-}
+type FunnelStage = { id: string; name: string; color: string; icon: string; description: string; sla: string };
+type FunnelDefinition = { id: string; name: string; description: string; color: string; icon: string; stages: FunnelStage[]; archived?: boolean };
+const FUNNEL_TABS = ["Visão Geral", "Funis", "Etapas", "Automações", "Regras", "Gatilhos"] as const;
+const stageId = () => `stage-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 
 function FunnelView({ notify }: { notify: (text: string, tone?: "success" | "error") => void }) {
-  const [contacts, setContacts] = useState<AnyRecord[]>([]);
-  const [reports, setReports] = useState<AnyRecord | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [tab, setTab] = useState<(typeof FUNNEL_TABS)[number]>("Visão Geral");
+  const [funnels, setFunnels] = useState<FunnelDefinition[]>(() => {
+    try { return JSON.parse(localStorage.getItem("prospec-custom-funnels") || "[]"); } catch { return []; }
+  });
+  const [selectedId, setSelectedId] = useState("");
+  const [showWizard, setShowWizard] = useState(false);
+  const [showFilters, setShowFilters] = useState(false);
+  const [showActivity, setShowActivity] = useState(true);
+  const [wizardStep, setWizardStep] = useState(1);
+  const [draft, setDraft] = useState({ name: "", description: "", color: "#B53F0D", icon: "◈", stages: ["Nova etapa", "Etapa seguinte"] });
   const [search, setSearch] = useState("");
-
-  useEffect(() => {
-    Promise.all([api("contacts", { page: 0, search: "" }), api("reports")])
-      .then(([contactData, reportData]) => {
-        setContacts(contactData?.contacts || []);
-        setReports(reportData || {});
-      })
-      .catch((error) => notify(error instanceof Error ? error.message : "Não foi possível carregar o funil.", "error"))
-      .finally(() => setLoading(false));
-  }, [notify]);
-
-  const visible = useMemo(() => {
-    const term = search.trim().toLocaleLowerCase("pt-BR");
-    if (!term) return contacts;
-    return contacts.filter((contact) =>
-      [contact.full_name, contact.company, contact.current_result].some((value) =>
-        String(value || "").toLocaleLowerCase("pt-BR").includes(term),
-      ),
-    );
-  }, [contacts, search]);
-  const stages = FUNNEL_STAGES.map((stage) => ({
-    ...stage,
-    contacts: visible.filter((contact) => funnelStageFor(contact.current_result) === stage.key),
-  }));
-  const total = Number(reports?.total ?? contacts.length);
-  const closed = stages.find((stage) => stage.key === "closed")?.contacts.length || 0;
-  const conversion = total ? (closed / total) * 100 : 0;
-
-  if (loading) return <LoadingBlock label="Montando o funil..." />;
+  const selected = funnels.find((item) => item.id === selectedId) || funnels.find((item) => !item.archived);
+  useEffect(() => { localStorage.setItem("prospec-custom-funnels", JSON.stringify(funnels)); }, [funnels]);
+  useEffect(() => { if (!selectedId && funnels[0]) setSelectedId(funnels[0].id); }, [funnels, selectedId]);
+  const saveFunnel = () => {
+    if (!draft.name.trim()) { notify("Informe o nome do funil.", "error"); return; }
+    const funnel: FunnelDefinition = { id: `funnel-${Date.now()}`, name: draft.name.trim(), description: draft.description.trim(), color: draft.color, icon: draft.icon, stages: draft.stages.filter(Boolean).map((name, index) => ({ id: stageId(), name, color: index % 2 ? "#306D64" : draft.color, icon: "●", description: "", sla: "24h" })) };
+    setFunnels((items) => [...items, funnel]); setSelectedId(funnel.id); setShowWizard(false); setWizardStep(1); setTab("Visão Geral");
+    setDraft({ name: "", description: "", color: "#B53F0D", icon: "◈", stages: ["Nova etapa", "Etapa seguinte"] }); notify("Funil criado com sucesso.");
+  };
+  const duplicate = (funnel: FunnelDefinition) => setFunnels((items) => [...items, { ...funnel, id: `funnel-${Date.now()}`, name: `${funnel.name} — cópia`, stages: funnel.stages.map((stage) => ({ ...stage, id: stageId() })) }]);
+  const updateSelected = (change: Partial<FunnelDefinition>) => selected && setFunnels((items) => items.map((item) => item.id === selected.id ? { ...item, ...change } : item));
+  const addStage = () => selected && updateSelected({ stages: [...selected.stages, { id: stageId(), name: "Nova etapa", color: "#D77428", icon: "●", description: "", sla: "24h" }] });
   return (
-    <div className="page-stack funnel-page">
-      <section className="funnel-heading-card">
-        <div><p className="eyebrow">GESTÃO DO FUNIL</p><h2>Funis de Atendimento</h2><p>Acompanhe o avanço real dos contatos em cada etapa.</p></div>
-        <div className="funnel-heading-actions"><select defaultValue="principal" aria-label="Selecionar funil"><option value="principal">Funil principal</option></select><button className="primary-button small">+ Novo funil</button></div>
+    <div className="page-stack funnel-page dynamic-funnels">
+      <section className="funnel-heading-card dynamic-funnel-heading">
+        <div><p className="eyebrow">PROSPEC KR · PROCESSOS PERSONALIZÁVEIS</p><h2>FUNIS</h2><p>Gerencie todos os seus processos comerciais. Cada empresa cria seus próprios funis, etapas, regras e automações.</p></div>
+        <div className="funnel-heading-actions"><button className="secondary-button small" onClick={() => setShowFilters(true)}>☷ Filtros</button><button className="secondary-button small">⇧ Importar</button><button className="primary-button small" onClick={() => setShowWizard(true)}>＋ Criar Funil</button><button className="icon-button">⋮</button></div>
       </section>
-      <section className="funnel-summary-grid">
-        {[["Total de contatos", total], ["Em andamento", Math.max(0, total - closed)], ["Convertidos", closed], ["Taxa de conversão", `${conversion.toLocaleString("pt-BR", { maximumFractionDigits: 1 })}%`], ["Reuniões", reports?.appointments ?? 0]].map(([label, value]) => (
-          <article className="funnel-summary-card" key={String(label)}><span>{label}</span><strong>{value}</strong><small>Dados atuais do sistema</small></article>
-        ))}
-      </section>
-      <section className="funnel-toolbar-card"><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Buscar contatos, empresas ou etapas..." aria-label="Buscar no funil"/><span>{visible.length} contato(s) exibido(s)</span></section>
-      <section className="funnel-board" aria-label="Etapas do funil">
-        {stages.map((stage, index) => (
-          <article className={`funnel-column stage-${stage.key}`} key={stage.key}>
-            <header><div><b>{index + 1}. {stage.label}</b><small>{stage.contacts.length} contato(s)</small></div><span>{stage.contacts.length}</span></header>
-            <div className="funnel-column-body">
-              {stage.contacts.slice(0, 20).map((contact) => (
-                <button className="funnel-contact-card" key={contact.id}><span className="avatar">{firstWord(contact.full_name).slice(0, 1)}</span><span><strong>{contact.full_name}</strong><small>{contact.company || "Empresa não informada"}</small><em>{contact.current_result || "Novo"}</em></span><b>›</b></button>
-              ))}
-              {!stage.contacts.length ? <div className="funnel-empty-column">Nenhum contato nesta etapa</div> : null}
-            </div>
-          </article>
-        ))}
-      </section>
-      <section className="funnel-analysis-grid">
-        <article className="chart-card"><p className="eyebrow">PERFORMANCE DO FUNIL</p><h2>Contatos por etapa</h2><div className="funnel-bars">{stages.map((stage) => <div key={stage.key}><span>{stage.label}</span><b><i style={{ width: `${total ? Math.max(3, (stage.contacts.length / total) * 100) : 0}%` }}/></b><strong>{stage.contacts.length}</strong></div>)}</div></article>
-        <article className="chart-card funnel-activity-card"><p className="eyebrow">ATIVIDADES RECENTES</p><h2>Últimas movimentações</h2>{contacts.slice(0, 5).map((contact) => <div className="funnel-activity" key={contact.id}><span>◉</span><div><strong>{contact.full_name}</strong><small>{contact.current_result || "Novo contato"}</small></div><time>{formatDate(contact.last_activity_at, false)}</time></div>)}{!contacts.length ? <p className="quiet-row">Nenhuma movimentação registrada.</p> : null}</article>
-      </section>
+      <nav className="funnel-tabs">{FUNNEL_TABS.map((item) => <button key={item} className={tab === item ? "active" : ""} onClick={() => setTab(item)}>{item}</button>)}</nav>
+      {!selected ? <section className="funnel-zero-state"><div className="empty-funnel-visual"><i/><i/><i/></div><p className="eyebrow">COMECE DO SEU JEITO</p><h2>Nenhum funil cadastrado</h2><p>Crie seu primeiro processo com as etapas, responsáveis, automações, regras e permissões que o seu escritório realmente usa.</p><button className="primary-button" onClick={() => setShowWizard(true)}>＋ Criar meu primeiro funil</button><small>O PROSPEC KR não cria etapas fixas. Você terá liberdade total.</small></section> : <>
+        <section className="funnel-selector"><div><span style={{ background: selected.color }}>{selected.icon}</span><select value={selected.id} onChange={(event) => setSelectedId(event.target.value)}>{funnels.filter((item) => !item.archived).map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select><small>{selected.description || "Funil personalizado"}</small></div><div><button onClick={() => duplicate(selected)}>⧉ Duplicar</button><button onClick={() => updateSelected({ archived: true })}>▣ Arquivar</button><button onClick={() => { if (confirm("Excluir este funil?")) setFunnels((items) => items.filter((item) => item.id !== selected.id)); }}>⌫ Excluir</button></div></section>
+        {tab === "Visão Geral" && <><section className="funnel-summary-grid">{[["Total de contatos", "0", "↗ Em tempo real"], ["Em andamento", "0", "0% do total"], ["Convertidos", "0", "Nenhuma conversão"], ["Taxa de conversão", "0%", "Meta personalizável"], ["Tempo médio", "—", "Aguardando dados"]].map(([label, value, detail], index) => <article className="funnel-summary-card" key={label}><span>{label}</span><strong>{value}</strong><svg viewBox="0 0 110 25"><path d={`M2 ${20-index} C 24 ${8+index}, 38 22, 55 13 S 82 ${5+index},108 8`} /></svg><small>{detail}</small></article>)}</section><section className="funnel-toolbar-card"><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="⌕ Pesquisar contato, empresa, banco, tag..."/><button onClick={() => setShowFilters(true)}>⚙ Todos os filtros</button><span>0 contatos exibidos</span></section><div className="funnel-content-grid"><section className="funnel-board dynamic-board" aria-label="Etapas personalizadas do funil">{selected.stages.map((stage, index) => <article className="funnel-column" key={stage.id}><header style={{ borderTopColor: stage.color }}><div><b>{stage.icon} {stage.name}</b><small>R$ 0,00 acumulado</small></div><span>0</span><button>⋮</button></header><div className="funnel-column-body"><div className="funnel-empty-column">Arraste contatos para esta etapa</div><button className="add-funnel-card">＋ Adicionar contato</button></div></article>)}</section>{showActivity && <aside className="recent-activity"><header><div><p className="eyebrow">ATIVIDADES RECENTES</p><h3>Últimos movimentos</h3></div><button onClick={() => setShowActivity(false)}>×</button></header><div className="activity-empty">◎<strong>Nenhuma atividade ainda</strong><small>Movimentos, reuniões, contratos e importações aparecerão aqui.</small></div></aside>}</div><section className="funnel-analysis-grid"><article className="chart-card performance-chart"><header><div><p className="eyebrow">PERFORMANCE DO FUNIL</p><h2>Evolução no período</h2></div><select><option>Últimos 30 dias</option><option>Esta semana</option><option>Este mês</option></select></header><div className="empty-chart"><svg viewBox="0 0 600 150"><path d="M0 130 C100 110 130 125 210 88 S360 110 430 55 S520 70 600 20"/><path d="M0 145 H600"/><path d="M0 100 H600"/><path d="M0 55 H600"/></svg><span>Os dados aparecerão conforme o funil for utilizado.</span></div></article><article className="chart-card conversion-chart"><p className="eyebrow">CONVERSÃO POR ETAPA</p><h2>Distribuição</h2><div className="donut-placeholder"><strong>0</strong><small>contatos</small></div><div className="chart-type"><button className="active">Rosca</button><button>Barras</button><button>Pizza</button></div></article></section></>}
+        {tab === "Funis" && <section className="funnel-management"><header><div><h2>Todos os funis</h2><p>Crie, edite, duplique ou arquive processos completos.</p></div><button className="primary-button small" onClick={() => setShowWizard(true)}>＋ Novo funil</button></header>{funnels.map((item) => <article key={item.id}><span style={{ background: item.color }}>{item.icon}</span><div><strong>{item.name}</strong><small>{item.stages.length} etapas · {item.archived ? "Arquivado" : "Ativo"}</small></div><button onClick={() => { setSelectedId(item.id); setTab("Visão Geral"); }}>Abrir</button><button onClick={() => duplicate(item)}>Duplicar</button><button>Editar</button></article>)}</section>}
+        {tab === "Etapas" && <section className="stage-settings"><header><div><h2>Configuração das etapas</h2><p>Defina ordem, cor, SLA, permissões e obrigatoriedades.</p></div><button className="primary-button small" onClick={addStage}>＋ Nova etapa</button></header>{selected.stages.map((stage, index) => <article key={stage.id}><b className="drag-handle">⠿</b><input type="color" value={stage.color} onChange={(event) => updateSelected({ stages: selected.stages.map((item) => item.id === stage.id ? { ...item, color: event.target.value } : item) })}/><div><input value={stage.name} onChange={(event) => updateSelected({ stages: selected.stages.map((item) => item.id === stage.id ? { ...item, name: event.target.value } : item) })}/><small>Etapa {index + 1} · SLA <input value={stage.sla} onChange={(event) => updateSelected({ stages: selected.stages.map((item) => item.id === stage.id ? { ...item, sla: event.target.value } : item) })}/></small></div><button>Automações</button><button>Permissões</button><button onClick={() => updateSelected({ stages: selected.stages.filter((item) => item.id !== stage.id) })}>⌫</button></article>)}</section>}
+        {["Automações", "Regras", "Gatilhos"].includes(tab) && <section className="automation-builder"><p className="eyebrow">CONSTRUTOR DINÂMICO</p><h2>{tab}</h2><p>{tab === "Automações" ? "Defina ações quando um contato entrar ou sair de uma etapa." : tab === "Regras" ? "Crie obrigatoriedades para proteger a qualidade do processo." : "Conecte eventos do WhatsApp, agenda, contratos, importações e recuperação."}</p><button className="primary-button small">＋ Criar {tab.slice(0, -1).toLowerCase()}</button><div className="automation-empty"><span>⚡</span><strong>Nenhuma configuração criada</strong><small>Todas as configurações serão específicas deste funil e poderão ser ativadas ou pausadas.</small></div></section>}
+      </>}
+      {showFilters && <div className="funnel-drawer-backdrop" onClick={() => setShowFilters(false)}><aside className="funnel-filter-drawer" onClick={(event) => event.stopPropagation()}><header><div><p className="eyebrow">FILTROS</p><h2>Refine o Kanban</h2></div><button onClick={() => setShowFilters(false)}>×</button></header>{["Responsável", "Advogado", "Chip", "Lista", "Banco", "Empresa", "Origem", "Tags", "Status", "Período", "Valor", "Etapa"].map((label) => <label key={label}>{label}<select><option>Todos</option></select></label>)}<footer><button className="secondary-button">Limpar</button><button className="primary-button" onClick={() => setShowFilters(false)}>Aplicar filtros</button></footer></aside></div>}
+      {showWizard && <div className="funnel-modal-backdrop"><section className="funnel-wizard"><header><div><p className="eyebrow">NOVO FUNIL · PASSO {wizardStep} DE 4</p><h2>{wizardStep === 1 ? "Identidade do funil" : wizardStep === 2 ? "Crie suas etapas" : wizardStep === 3 ? "Regras e responsáveis" : "Revise e crie"}</h2></div><button onClick={() => setShowWizard(false)}>×</button></header><div className="wizard-progress"><i className={wizardStep >= 1 ? "active" : ""}/><i className={wizardStep >= 2 ? "active" : ""}/><i className={wizardStep >= 3 ? "active" : ""}/><i className={wizardStep >= 4 ? "active" : ""}/></div>{wizardStep === 1 && <div className="wizard-fields"><label>Nome do funil<input autoFocus value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} placeholder="Ex.: Atendimento trabalhista"/></label><label>Descrição<textarea value={draft.description} onChange={(event) => setDraft({ ...draft, description: event.target.value })} placeholder="Explique o objetivo deste processo"/></label><div><label>Cor<input type="color" value={draft.color} onChange={(event) => setDraft({ ...draft, color: event.target.value })}/></label><label>Ícone<select value={draft.icon} onChange={(event) => setDraft({ ...draft, icon: event.target.value })}><option>◈</option><option>◆</option><option>⚖</option><option>◎</option><option>▣</option></select></label></div></div>}{wizardStep === 2 && <div className="wizard-stages"><p>Adicione quantas etapas desejar. Estes nomes são totalmente editáveis.</p>{draft.stages.map((name, index) => <div key={index}><b>⠿</b><input value={name} onChange={(event) => setDraft({ ...draft, stages: draft.stages.map((item, itemIndex) => itemIndex === index ? event.target.value : item) })}/><button onClick={() => setDraft({ ...draft, stages: draft.stages.filter((_, itemIndex) => itemIndex !== index) })}>×</button></div>)}<button onClick={() => setDraft({ ...draft, stages: [...draft.stages, `Etapa ${draft.stages.length + 1}`] })}>＋ Adicionar etapa</button></div>}{wizardStep === 3 && <div className="wizard-options">{["Responsáveis", "Automações", "Regras obrigatórias", "Permissões por cargo"].map((item) => <button key={item}><span>○</span><b>{item}</b><small>Configurar depois</small>›</button>)}</div>}{wizardStep === 4 && <div className="wizard-review"><span style={{ background: draft.color }}>{draft.icon}</span><h3>{draft.name || "Funil sem nome"}</h3><p>{draft.description || "Sem descrição"}</p><strong>{draft.stages.filter(Boolean).length} etapas</strong><div>{draft.stages.filter(Boolean).map((name) => <small key={name}>{name}</small>)}</div></div>}<footer><button className="secondary-button" onClick={() => wizardStep === 1 ? setShowWizard(false) : setWizardStep((step) => step - 1)}>← {wizardStep === 1 ? "Cancelar" : "Voltar"}</button><button className="primary-button" onClick={() => wizardStep === 4 ? saveFunnel() : setWizardStep((step) => step + 1)}>{wizardStep === 4 ? "Criar funil" : "Continuar →"}</button></footer></section></div>}
     </div>
   );
 }
