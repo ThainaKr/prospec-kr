@@ -3,7 +3,7 @@ name: Deploy GitHub Pages
 on:
   push:
     branches:
-      - agent/prospec-kr-visual-rebuild
+      - main
   workflow_dispatch:
 
 permissions:
