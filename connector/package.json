@@ -1,0 +1,17 @@
+{
+  "name": "prospec-kr-whatsapp-connector",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=24" },
+  "scripts": {
+    "start": "node --env-file=.env src/server.js",
+    "check": "node --check src/server.js"
+  },
+  "dependencies": {
+    "@whiskeysockets/baileys": "7.0.0-rc14",
+    "express": "5.2.1",
+    "pino": "10.3.1",
+    "qrcode": "1.5.4"
+  }
+}

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { supabase } from "../supabase";
 import { callProspecApi } from "../api/prospecApi";
 import { loadRealDataSnapshot, type RealDataSnapshot } from "../api/realData";
+import type { WhatsAppChannelRow } from "../types/database";
 
 const EMPTY: RealDataSnapshot = {
   profiles: [], lists: [], contacts: [], recoveries: [], appointments: [], notifications: [], chips: [], templates: [],
@@ -127,6 +128,12 @@ export function ProspecChipsUsersReal() {
   const [landingRoute, setLandingRoute] = useState("/agenda");
   const [inviteBusy, setInviteBusy] = useState(false);
   const [inviteMessage, setInviteMessage] = useState("");
+  const [channels, setChannels] = useState<WhatsAppChannelRow[]>([]);
+  const [channelName, setChannelName] = useState("");
+  const [channelPhone, setChannelPhone] = useState("");
+  const [channelBusy, setChannelBusy] = useState(false);
+  const [channelMessage, setChannelMessage] = useState("");
+  const [qrCode, setQrCode] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -136,21 +143,24 @@ export function ProspecChipsUsersReal() {
         const userId = sessionData.session?.user.id;
         if (!userId) throw new Error("Sessão não encontrada.");
 
-        const [data, permissionResult, incidentResult, statResult] = await Promise.all([
+        const [data, permissionResult, incidentResult, statResult, channelResult] = await Promise.all([
           loadRealDataSnapshot(),
           supabase.from("user_permissions").select("user_id,can_manage_chips_users,can_manage_chips,can_manage_users,can_view_settings").eq("user_id", userId).maybeSingle(),
           supabase.from("chip_incidents").select("id,chip_id,incident_type,occurred_at,reason,messages_24h,replies,meetings").order("occurred_at", { ascending: false }).limit(50),
           supabase.from("chip_daily_stats").select("id,chip_id,stat_date,messages_sent,replies_received,audios_sent,schedules_created,meetings_completed,contracts_closed,usage_minutes").order("stat_date", { ascending: false }).limit(100),
+          supabase.from("whatsapp_channels").select("id,organization_id,chip_id,name,phone_number,phone_number_id,provider,owner_id,connection_mode,session_state,status,quality_rating,last_webhook_at,last_error").eq("active", true).order("name"),
         ]);
 
         if (permissionResult.error) throw permissionResult.error;
         if (incidentResult.error) throw incidentResult.error;
         if (statResult.error) throw statResult.error;
+        if (channelResult.error) throw channelResult.error;
         if (!active) return;
         setSnapshot(data);
         setPermissions(permissionResult.data as PermissionRow | null);
         setIncidents((incidentResult.data ?? []) as ChipIncident[]);
         setDailyStats((statResult.data ?? []) as DailyStat[]);
+        setChannels((channelResult.data ?? []) as WhatsAppChannelRow[]);
       } catch (reason) {
         if (active) setError(reason instanceof Error ? reason.message : "Falha ao carregar chips e usuários.");
       } finally {
@@ -187,6 +197,47 @@ export function ProspecChipsUsersReal() {
 
   function toggleInvitePermission(key: InvitePermissionKey) {
     setInvitePermissions((current) => ({ ...current, [key]: !current[key] }));
+  }
+
+  async function refreshChannels() {
+    const { data, error: refreshError } = await supabase.from("whatsapp_channels").select("id,organization_id,chip_id,name,phone_number,phone_number_id,provider,owner_id,connection_mode,session_state,status,quality_rating,last_webhook_at,last_error").eq("active", true).order("name");
+    if (refreshError) throw refreshError;
+    setChannels((data ?? []) as WhatsAppChannelRow[]);
+  }
+
+  async function addChannel(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setChannelBusy(true); setChannelMessage(""); setQrCode(null);
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const userId = sessionData.session?.user.id;
+      if (!userId) throw new Error("Sessão não encontrada.");
+      const { data: profile, error: profileError } = await supabase.from("profiles").select("organization_id").eq("id", userId).single();
+      if (profileError || !profile?.organization_id) throw new Error("Empresa da administradora não encontrada.");
+      const phone = channelPhone.replace(/\D/g, "");
+      if (!channelName.trim() || phone.length < 10) throw new Error("Informe o nome e o número com DDD.");
+      const { error: insertError } = await supabase.from("whatsapp_channels").insert({ organization_id: profile.organization_id, name: channelName.trim(), phone_number: phone, provider: "whatsapp_web", connection_mode: "qr", session_state: "new", status: "setup_required", active: true });
+      if (insertError) throw insertError;
+      setChannelName(""); setChannelPhone(""); setChannelMessage("WhatsApp cadastrado. Clique em Conectar para gerar o QR Code.");
+      await refreshChannels();
+    } catch (reason) { setChannelMessage(reason instanceof Error ? reason.message : "Não foi possível cadastrar."); }
+    finally { setChannelBusy(false); }
+  }
+
+  async function connectChannel(channelId: string) {
+    setChannelBusy(true); setChannelMessage("Iniciando sessão no notebook..."); setQrCode(null);
+    try {
+      const { data, error: invokeError } = await supabase.functions.invoke("whatsapp-gateway", { body: { action: "start_instance", channelId } });
+      if (invokeError || !data?.ok) throw new Error(data?.error || invokeError?.message || "Não foi possível iniciar a sessão.");
+      for (let attempt = 0; attempt < 20; attempt += 1) {
+        await new Promise((resolve) => window.setTimeout(resolve, 1500));
+        const result = await supabase.functions.invoke("whatsapp-gateway", { body: { action: "get_instance_qr", channelId } });
+        if (result.data?.state === "connected") { setChannelMessage("WhatsApp conectado com sucesso."); break; }
+        if (result.data?.qr) { setQrCode(result.data.qr); setChannelMessage("Escaneie o QR Code no WhatsApp."); break; }
+      }
+      await refreshChannels();
+    } catch (reason) { setChannelMessage(reason instanceof Error ? reason.message : "Falha ao conectar."); }
+    finally { setChannelBusy(false); }
   }
 
   async function submitInvite(event: React.FormEvent<HTMLFormElement>) {
@@ -273,6 +324,17 @@ export function ProspecChipsUsersReal() {
                   return <div className="list-row" key={item.id}><div><strong>{chip?.name || "Chip não localizado"}</strong><small>{new Date(item.occurred_at).toLocaleString("pt-BR")}</small></div><span>{item.incident_type}</span><em>{item.reason || "Sem motivo registrado"}</em></div>;
                 }) : <p>Nenhum incidente registrado.</p>}
               </article>
+            </section>
+            <section className="prospec-card premium-card panel" style={{ marginTop: 14 }}>
+              <div className="section-heading-row"><div><h2>WhatsApps conectados ao CRM</h2><small>Contas comuns ou Business por QR Code</small></div></div>
+              <form className="prospec-invite-form" onSubmit={addChannel}>
+                <label>Nome do WhatsApp<input value={channelName} onChange={(event) => setChannelName(event.target.value)} placeholder="Ex.: Chip 01 · Thainá" /></label>
+                <label>Número com DDD<input value={channelPhone} onChange={(event) => setChannelPhone(event.target.value)} placeholder="Ex.: 4798405980" inputMode="tel" /></label>
+                <button className="prospec-button-primary" disabled={channelBusy || !permissions?.can_manage_chips}>{channelBusy ? "Aguarde..." : "Cadastrar WhatsApp"}</button>
+              </form>
+              {channelMessage ? <p>{channelMessage}</p> : null}
+              {qrCode ? <div className="prospec-card" style={{ maxWidth: 390, margin: "14px auto", padding: 14, textAlign: "center" }}><img src={qrCode} alt="QR Code para conectar o WhatsApp" style={{ width: "100%", borderRadius: 12 }} /><p>WhatsApp → Aparelhos conectados → Conectar aparelho</p></div> : null}
+              {channels.length ? channels.map((channel) => <div className="recovery-card" key={channel.id}><strong>{channel.name}</strong><span>+{channel.phone_number}</span><small>{channel.session_state === "connected" ? "Conectado" : channel.session_state === "awaiting_pairing" ? "Aguardando QR Code" : "Desconectado"}</small><button className="prospec-button-outline" disabled={channelBusy} onClick={() => void connectChannel(channel.id)}>{channel.session_state === "connected" ? "Verificar" : "Conectar"}</button></div>) : <p>Nenhum WhatsApp cadastrado ainda.</p>}
             </section>
           </>
         ) : (

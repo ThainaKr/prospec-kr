@@ -38,6 +38,30 @@ async function send(req: Request, input: Record<string, unknown>) {
   return reply({ ok: true, message });
 }
 
+async function manageInstance(req: Request, input: Record<string, unknown>) {
+  const user = await userFor(req);
+  if (!user) return reply({ ok: false, error: "Sessão inválida." }, 401);
+  const channelId = String(input.channelId ?? "");
+  const { data: profile } = await admin.from("profiles").select("organization_id,role,active,status").eq("id", user.id).single();
+  if (!profile?.active || profile.status !== "active" || profile.role !== "admin") return reply({ ok: false, error: "Apenas a administradora pode conectar WhatsApps." }, 403);
+  const { data: channel } = await admin.from("whatsapp_channels").select("*").eq("id", channelId).eq("organization_id", profile.organization_id).single();
+  if (!channel) return reply({ ok: false, error: "Canal não encontrado." }, 404);
+  const instanceId = channel.bridge_instance_id || `channel_${channel.id.replaceAll("-", "")}`;
+  const action = String(input.action ?? "");
+  const path = action === "start_instance"
+    ? `/instances/${encodeURIComponent(instanceId)}/start`
+    : action === "get_instance_qr"
+      ? `/instances/${encodeURIComponent(instanceId)}/qr`
+      : `/instances/${encodeURIComponent(instanceId)}`;
+  const response = await bridge(path, { method: action === "start_instance" ? "POST" : "GET" });
+  const result = await response.json();
+  if (!response.ok) return reply({ ok: false, error: result.error ?? "Falha no servidor de sessões." }, 502);
+  if (action === "start_instance") {
+    await admin.from("whatsapp_channels").update({ bridge_instance_id: instanceId, provider: "whatsapp_web", connection_mode: "qr", session_state: result.state ?? "awaiting_pairing", status: result.state === "connected" ? "connected" : "connecting", last_error: null }).eq("id", channel.id);
+  }
+  return reply({ ok: true, instanceId, ...result });
+}
+
 async function webhook(req: Request, input: Record<string, unknown>) {
   if (!webhookKey || req.headers.get("x-webhook-key") !== webhookKey) return reply({ ok: false }, 401);
   const instanceId = String(input.instanceId ?? "");
@@ -61,5 +85,6 @@ Deno.serve(async (req) => {
   const input = await req.json();
   if (input.action === "bridge_webhook") return webhook(req, input);
   if (input.action === "send_text") return send(req, input);
+  if (["start_instance", "get_instance", "get_instance_qr"].includes(String(input.action))) return manageInstance(req, input);
   return reply({ ok: false, error: "Ação desconhecida." }, 400);
 });
