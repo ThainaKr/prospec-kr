@@ -220,7 +220,7 @@ export default function App() {
 
   const route = normalizeRoute(window.location.pathname);
 
-  if (route === "/" || route === "/app") return <ProspecRealHome />;
+  if (route === "/" || route === "/app") return <ProspecDashboard session={session} />;
   if (route === "/painel-antigo") return <ProspecDashboard session={session} />;
 
   if (route === "/inicio" || route === "/inicio-real") return <ProspecRealHome />;

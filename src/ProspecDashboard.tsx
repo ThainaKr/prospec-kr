@@ -20,6 +20,25 @@ type PageKey =
 
 type AnyRecord = Record<string, any>;
 
+const PAGE_PATHS: Record<PageKey, string> = {
+  home: "inicio",
+  notifications: "notificacoes",
+  agenda: "agenda",
+  lists: "listas-contatos",
+  templates: "modelos-mensagens",
+  reports: "relatorios",
+  "chips-users": "chips-usuarios",
+  profile: "meu-perfil",
+};
+
+function pageFromLocation(): PageKey {
+  const segment = window.location.hash.replace(/^#\/?/, "").split("/")[0];
+  const match = (Object.entries(PAGE_PATHS) as Array<[PageKey, string]>).find(
+    ([, path]) => path === segment,
+  );
+  return match?.[0] || "home";
+}
+
 const ADMIN_NAV: Array<[PageKey, string, string]> = [
   ["home", "Início", "⌂"],
   ["notifications", "Notificações", "●"],
@@ -1576,7 +1595,7 @@ function ProfileView({
 }
 
 export default function ProspecDashboard({ session }: { session: Session }) {
-  const [page, setPage] = useState<PageKey>("home");
+  const [page, setPage] = useState<PageKey>(pageFromLocation);
   const [bootstrap, setBootstrap] = useState<AnyRecord | null>(null);
   const [loading, setLoading] = useState(true);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -1599,6 +1618,12 @@ export default function ProspecDashboard({ session }: { session: Session }) {
       .catch((error) => setFatal(error.message))
       .finally(() => setLoading(false));
   }, [refreshBootstrap]);
+
+  useEffect(() => {
+    const syncRoute = () => setPage(pageFromLocation());
+    window.addEventListener("hashchange", syncRoute);
+    return () => window.removeEventListener("hashchange", syncRoute);
+  }, []);
 
   if (loading) {
     return (
@@ -1631,6 +1656,7 @@ export default function ProspecDashboard({ session }: { session: Session }) {
 
   const role = bootstrap.profile?.role || "lawyer";
   const nav = role === "admin" ? ADMIN_NAV : LAWYER_NAV;
+  const activePage = page === "chips-users" && role !== "admin" ? "home" : page;
   const titles: Record<PageKey, [string, string]> = {
     home: [
       "Início",
@@ -1651,6 +1677,7 @@ export default function ProspecDashboard({ session }: { session: Session }) {
 
   const go = (target: PageKey) => {
     setPage(target);
+    window.history.pushState(null, "", `#/${PAGE_PATHS[target]}`);
     setMenuOpen(false);
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
@@ -1658,8 +1685,8 @@ export default function ProspecDashboard({ session }: { session: Session }) {
   return (
     <div className="app-shell">
       <Header
-        title={titles[page][0]}
-        subtitle={titles[page][1]}
+        title={titles[activePage][0]}
+        subtitle={titles[activePage][1]}
         onMenu={() => setMenuOpen(true)}
         badge={bootstrap.counters?.notifications}
       />
@@ -1687,7 +1714,7 @@ export default function ProspecDashboard({ session }: { session: Session }) {
                 (role === "admin" || key !== "chips-users"),
             )
             .map(([key, label, icon]) => (
-              <button key={key} className={page === key ? "active" : ""} onClick={() => go(key)}>
+              <button key={key} className={activePage === key ? "active" : ""} onClick={() => go(key)}>
                 <span>{icon}</span>
                 {label}
               </button>
@@ -1701,22 +1728,22 @@ export default function ProspecDashboard({ session }: { session: Session }) {
       {menuOpen ? <button className="drawer-backdrop" onClick={() => setMenuOpen(false)} /> : null}
 
       <main className="app-content">
-        {page === "home" ? <HomeView bootstrap={bootstrap} role={role} notify={notify} /> : null}
-        {page === "notifications" ? <NotificationsView notify={notify} /> : null}
-        {page === "agenda" ? <AgendaView notify={notify} /> : null}
-        {page === "lists" ? (
+        {activePage === "home" ? <HomeView bootstrap={bootstrap} role={role} notify={notify} /> : null}
+        {activePage === "notifications" ? <NotificationsView notify={notify} /> : null}
+        {activePage === "agenda" ? <AgendaView notify={notify} /> : null}
+        {activePage === "lists" ? (
           <ListsView
             bootstrap={bootstrap}
             notify={notify}
             refreshBootstrap={refreshBootstrap}
           />
         ) : null}
-        {page === "templates" ? <TemplatesView role={role} notify={notify} /> : null}
-        {page === "reports" ? <ReportsView notify={notify} /> : null}
-        {page === "chips-users" && role === "admin" ? (
+        {activePage === "templates" ? <TemplatesView role={role} notify={notify} /> : null}
+        {activePage === "reports" ? <ReportsView notify={notify} /> : null}
+        {activePage === "chips-users" && role === "admin" ? (
           <ChipsUsersView notify={notify} />
         ) : null}
-        {page === "profile" ? (
+        {activePage === "profile" ? (
           <ProfileView
             profile={bootstrap.profile}
             onSignOut={() => supabase.auth.signOut()}
@@ -1726,7 +1753,7 @@ export default function ProspecDashboard({ session }: { session: Session }) {
 
       <nav className="bottom-nav" aria-label="Navegação principal">
         {nav.map(([key, label, icon]) => (
-          <button key={key} className={page === key ? "active" : ""} onClick={() => go(key)}>
+          <button key={key} className={activePage === key ? "active" : ""} onClick={() => go(key)}>
             <span>{icon}</span>
             <small>{label}</small>
           </button>
