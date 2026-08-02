@@ -1,4 +1,4 @@
-name: Validar PROSPEC KR
+name: Publicar PROSPEC KR
 
 on:
   push:
@@ -7,16 +7,18 @@ on:
 
 permissions:
   contents: read
+  pages: write
+  id-token: write
 
 concurrency:
-  group: validate
+  group: pages
   cancel-in-progress: true
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
 
 jobs:
-  validate:
+  build:
     runs-on: ubuntu-latest
     steps:
       - name: Baixar código
@@ -32,4 +34,25 @@ jobs:
         run: npm ci
 
       - name: Validar e gerar aplicação
+        env:
+          VITE_APP_URL: https://thainakr.github.io/prospec-kr/
         run: npm run build
+
+      - name: Preparar GitHub Pages
+        uses: actions/configure-pages@v5
+
+      - name: Enviar artefato
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: ./dist
+
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Publicar
+        id: deployment
+        uses: actions/deploy-pages@v4
