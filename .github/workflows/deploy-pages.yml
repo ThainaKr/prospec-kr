@@ -36,6 +36,8 @@ jobs:
       - name: Validar e gerar aplicação
         env:
           VITE_APP_URL: https://thainakr.github.io/prospec-kr/
+          VITE_SUPABASE_URL: https://rqrzsfgzdjyinewkrqxf.supabase.co
+          VITE_SUPABASE_PUBLISHABLE_KEY: sb_publishable_9vIllvlOHiD6lRQwdkMljw_JaIb5tgq
         run: npm run build
 
       - name: Preparar GitHub Pages
