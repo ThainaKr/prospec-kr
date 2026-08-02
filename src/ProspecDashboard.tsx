@@ -44,7 +44,7 @@ function pageFromLocation(): PageKey {
 
 const ADMIN_NAV: Array<[PageKey, string, string]> = [
   ["home", "Início", "⌂"],
-  ["funnel", "Funil", "▽"],
+  ["funnel", "Funis", "▽"],
   ["notifications", "Notificações", "●"],
   ["agenda", "Agenda", "▦"],
   ["lists", "Listas", "☷"],
@@ -54,7 +54,7 @@ const ADMIN_NAV: Array<[PageKey, string, string]> = [
 
 const LAWYER_NAV: Array<[PageKey, string, string]> = [
   ["home", "Início", "⌂"],
-  ["funnel", "Funil", "▽"],
+  ["funnel", "Funis", "▽"],
   ["notifications", "Notificações", "●"],
   ["agenda", "Agenda", "▦"],
   ["lists", "Listas", "☷"],
@@ -275,6 +275,7 @@ function HomeView({
         <nav>
           <button className="active"><span>⌂</span><b>Atendimento<small>Converse e avance</small></b></button>
           <button onClick={() => onNavigate("home")}><span>⌂</span><b>Início<small>Visão geral</small></b></button>
+          <button onClick={() => onNavigate("funnel")}><span>▽</span><b>Funis<small>Etapas e conversões</small></b></button>
           <button onClick={() => onNavigate("lists")}><span>♙</span><b>Listas e Contatos<small>Suas listas e leads</small></b></button>
           <button onClick={() => onNavigate("templates")}><span>▤</span><b>Modelos<small>Mensagens e áudios</small></b></button>
           <button onClick={() => onNavigate("agenda")}><span>▦</span><b>Agenda<small>Compromissos</small></b></button>
@@ -1208,7 +1209,15 @@ type FunnelDefinition = { id: string; name: string; description: string; color: 
 const FUNNEL_TABS = ["Visão Geral", "Funis", "Etapas", "Automações", "Regras", "Gatilhos"] as const;
 const stageId = () => `stage-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 
-function FunnelView({ notify }: { notify: (text: string, tone?: "success" | "error") => void }) {
+function FunnelView({
+  notify,
+  onNavigate,
+  bootstrap,
+}: {
+  notify: (text: string, tone?: "success" | "error") => void;
+  onNavigate: (page: PageKey) => void;
+  bootstrap: AnyRecord;
+}) {
   const [tab, setTab] = useState<(typeof FUNNEL_TABS)[number]>("Visão Geral");
   const [funnels, setFunnels] = useState<FunnelDefinition[]>(() => {
     try { return JSON.parse(localStorage.getItem("prospec-custom-funnels") || "[]"); } catch { return []; }
@@ -1217,6 +1226,7 @@ function FunnelView({ notify }: { notify: (text: string, tone?: "success" | "err
   const [showWizard, setShowWizard] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
   const [showActivity, setShowActivity] = useState(true);
+  const [mobileMenu, setMobileMenu] = useState(false);
   const [wizardStep, setWizardStep] = useState(1);
   const [draft, setDraft] = useState({ name: "", description: "", color: "#B53F0D", icon: "◈", stages: ["Nova etapa", "Etapa seguinte"] });
   const [search, setSearch] = useState("");
@@ -1233,7 +1243,37 @@ function FunnelView({ notify }: { notify: (text: string, tone?: "success" | "err
   const updateSelected = (change: Partial<FunnelDefinition>) => selected && setFunnels((items) => items.map((item) => item.id === selected.id ? { ...item, ...change } : item));
   const addStage = () => selected && updateSelected({ stages: [...selected.stages, { id: stageId(), name: "Nova etapa", color: "#D77428", icon: "●", description: "", sla: "24h" }] });
   return (
-    <div className="page-stack funnel-page dynamic-funnels">
+    <div className="funnel-operations-shell">
+      <aside className={`operations-sidebar funnel-sidebar ${mobileMenu ? "open" : ""}`}>
+        <div className="operations-brand"><i>PROSPEC</i><b>KR</b><button onClick={() => setMobileMenu(false)}>×</button></div>
+        <nav>
+          <button onClick={() => onNavigate("home")}><span>⌂</span><b>Atendimento<small>Converse e avance</small></b></button>
+          <button onClick={() => onNavigate("home")}><span>⌂</span><b>Início<small>Visão geral</small></b></button>
+          <button className="active"><span>▽</span><b>Funis<small>Etapas e conversões</small></b></button>
+          <button onClick={() => onNavigate("lists")}><span>♙</span><b>Listas e Contatos<small>Suas listas e leads</small></b></button>
+          <button onClick={() => onNavigate("agenda")}><span>▦</span><b>Agenda<small>Compromissos</small></b></button>
+          <button onClick={() => onNavigate("templates")}><span>▤</span><b>Modelos<small>Mensagens e áudios</small></b></button>
+          <button onClick={() => onNavigate("reports")}><span>▥</span><b>Relatórios<small>Desempenho</small></b></button>
+          <button onClick={() => onNavigate("notifications")}><span>●</span><b>Notificações<small>Avisos da operação</small></b></button>
+          <button onClick={() => onNavigate("settings")}><span>⚙</span><b>Configurações<small>Preferências</small></b></button>
+          <button><span>?</span><b>Ajuda<small>Central de suporte</small></b></button>
+        </nav>
+      </aside>
+      {mobileMenu ? <button className="operations-backdrop" onClick={() => setMobileMenu(false)} /> : null}
+      <main className="funnel-operations-main">
+        <header className="funnel-global-topbar">
+          <button className="operations-menu-button" onClick={() => setMobileMenu(true)}>☰</button>
+          <div className="mobile-operations-brand"><i>PROSPEC</i><b>KR</b></div>
+          <label className="funnel-global-search"><span>⌕</span><input aria-label="Pesquisa global" placeholder="Buscar contatos, empresas, tags..."/><kbd>Ctrl + K</kbd></label>
+          <span className="topbar-spacer" />
+          <button className="funnel-create-shortcut" onClick={() => setShowWizard(true)}>＋</button>
+          <button className="topbar-icon notification-dot">♧</button>
+          <button className="topbar-icon">▣</button>
+          <button className="topbar-icon">▦</button>
+          <button className="topbar-icon">⚙</button>
+          <button className="profile-button"><span className="avatar small-avatar">{(bootstrap.profile?.full_name || "Thainá Krause").split(" ").map((part: string) => part[0]).slice(0, 2).join("")}</span><b>{bootstrap.profile?.full_name || "Thainá Krause"}<small>{bootstrap.profile?.role === "admin" ? "Administradora" : "Advogado"}</small></b>⌄</button>
+        </header>
+        <div className="page-stack funnel-page dynamic-funnels">
       <section className="funnel-heading-card dynamic-funnel-heading">
         <div><p className="eyebrow">PROSPEC KR · PROCESSOS PERSONALIZÁVEIS</p><h2>FUNIS</h2><p>Gerencie todos os seus processos comerciais. Cada empresa cria seus próprios funis, etapas, regras e automações.</p></div>
         <div className="funnel-heading-actions"><button className="secondary-button small" onClick={() => setShowFilters(true)}>☷ Filtros</button><button className="secondary-button small">⇧ Importar</button><button className="primary-button small" onClick={() => setShowWizard(true)}>＋ Criar Funil</button><button className="icon-button">⋮</button></div>
@@ -1248,6 +1288,16 @@ function FunnelView({ notify }: { notify: (text: string, tone?: "success" | "err
       </>}
       {showFilters && <div className="funnel-drawer-backdrop" onClick={() => setShowFilters(false)}><aside className="funnel-filter-drawer" onClick={(event) => event.stopPropagation()}><header><div><p className="eyebrow">FILTROS</p><h2>Refine o Kanban</h2></div><button onClick={() => setShowFilters(false)}>×</button></header>{["Responsável", "Advogado", "Chip", "Lista", "Banco", "Empresa", "Origem", "Tags", "Status", "Período", "Valor", "Etapa"].map((label) => <label key={label}>{label}<select><option>Todos</option></select></label>)}<footer><button className="secondary-button">Limpar</button><button className="primary-button" onClick={() => setShowFilters(false)}>Aplicar filtros</button></footer></aside></div>}
       {showWizard && <div className="funnel-modal-backdrop"><section className="funnel-wizard"><header><div><p className="eyebrow">NOVO FUNIL · PASSO {wizardStep} DE 4</p><h2>{wizardStep === 1 ? "Identidade do funil" : wizardStep === 2 ? "Crie suas etapas" : wizardStep === 3 ? "Regras e responsáveis" : "Revise e crie"}</h2></div><button onClick={() => setShowWizard(false)}>×</button></header><div className="wizard-progress"><i className={wizardStep >= 1 ? "active" : ""}/><i className={wizardStep >= 2 ? "active" : ""}/><i className={wizardStep >= 3 ? "active" : ""}/><i className={wizardStep >= 4 ? "active" : ""}/></div>{wizardStep === 1 && <div className="wizard-fields"><label>Nome do funil<input autoFocus value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} placeholder="Ex.: Atendimento trabalhista"/></label><label>Descrição<textarea value={draft.description} onChange={(event) => setDraft({ ...draft, description: event.target.value })} placeholder="Explique o objetivo deste processo"/></label><div><label>Cor<input type="color" value={draft.color} onChange={(event) => setDraft({ ...draft, color: event.target.value })}/></label><label>Ícone<select value={draft.icon} onChange={(event) => setDraft({ ...draft, icon: event.target.value })}><option>◈</option><option>◆</option><option>⚖</option><option>◎</option><option>▣</option></select></label></div></div>}{wizardStep === 2 && <div className="wizard-stages"><p>Adicione quantas etapas desejar. Estes nomes são totalmente editáveis.</p>{draft.stages.map((name, index) => <div key={index}><b>⠿</b><input value={name} onChange={(event) => setDraft({ ...draft, stages: draft.stages.map((item, itemIndex) => itemIndex === index ? event.target.value : item) })}/><button onClick={() => setDraft({ ...draft, stages: draft.stages.filter((_, itemIndex) => itemIndex !== index) })}>×</button></div>)}<button onClick={() => setDraft({ ...draft, stages: [...draft.stages, `Etapa ${draft.stages.length + 1}`] })}>＋ Adicionar etapa</button></div>}{wizardStep === 3 && <div className="wizard-options">{["Responsáveis", "Automações", "Regras obrigatórias", "Permissões por cargo"].map((item) => <button key={item}><span>○</span><b>{item}</b><small>Configurar depois</small>›</button>)}</div>}{wizardStep === 4 && <div className="wizard-review"><span style={{ background: draft.color }}>{draft.icon}</span><h3>{draft.name || "Funil sem nome"}</h3><p>{draft.description || "Sem descrição"}</p><strong>{draft.stages.filter(Boolean).length} etapas</strong><div>{draft.stages.filter(Boolean).map((name) => <small key={name}>{name}</small>)}</div></div>}<footer><button className="secondary-button" onClick={() => wizardStep === 1 ? setShowWizard(false) : setWizardStep((step) => step - 1)}>← {wizardStep === 1 ? "Cancelar" : "Voltar"}</button><button className="primary-button" onClick={() => wizardStep === 4 ? saveFunnel() : setWizardStep((step) => step + 1)}>{wizardStep === 4 ? "Criar funil" : "Continuar →"}</button></footer></section></div>}
+        </div>
+      </main>
+      <nav className="funnel-mobile-nav" aria-label="Navegação principal">
+        <button onClick={() => onNavigate("home")}><span>⌂</span><small>Início</small></button>
+        <button className="active"><span>▽</span><small>Funis</small></button>
+        <button onClick={() => onNavigate("notifications")}><span>●</span><small>Notificações</small></button>
+        <button onClick={() => onNavigate("agenda")}><span>▦</span><small>Agenda</small></button>
+        <button onClick={() => onNavigate("lists")}><span>☷</span><small>Listas</small></button>
+        <button onClick={() => onNavigate("reports")}><span>▥</span><small>Relatórios</small></button>
+      </nav>
     </div>
   );
 }
@@ -1615,7 +1665,7 @@ export default function ProspecDashboard() {
         bootstrap.profile?.full_name || "Thainá",
       )}.`,
     ],
-    funnel: ["Funil", "Acompanhe contatos, avanço e conversão por etapa."],
+    funnel: ["Funis", "Acompanhe contatos, avanço e conversão por etapa."],
     notifications: ["Notificações", "Acompanhe tudo que precisa da sua atenção."],
     agenda: ["Agenda", "Reuniões e compromissos da equipe."],
     lists: ["Listas e Contatos", "Gerencie a operação e a Recuperação."],
@@ -1633,7 +1683,7 @@ export default function ProspecDashboard() {
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
-  const operationsMode = activePage === "home";
+  const operationsMode = activePage === "home" || activePage === "funnel";
 
   return (
     <div className={`app-shell ${operationsMode ? "operations-mode" : ""}`}>
@@ -1679,7 +1729,7 @@ export default function ProspecDashboard() {
 
       <main className="app-content">
         {activePage === "home" ? <HomeView bootstrap={bootstrap} onNavigate={go} /> : null}
-        {activePage === "funnel" ? <FunnelView notify={notify} /> : null}
+        {activePage === "funnel" ? <FunnelView notify={notify} onNavigate={go} bootstrap={bootstrap} /> : null}
         {activePage === "notifications" ? <NotificationsView notify={notify} /> : null}
         {activePage === "agenda" ? <AgendaView notify={notify} /> : null}
         {activePage === "lists" ? (
