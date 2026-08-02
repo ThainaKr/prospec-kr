@@ -2,9 +2,9 @@ name: CI
 
 on:
   pull_request:
-    branches: [main, agent/prospec-kr-completo, agent/prospec-kr-permissions-integration]
+    branches: [main]
   push:
-    branches: [agent/prospec-kr-completo, agent/prospec-kr-permissions-integration, agent/prospec-kr-visual-rebuild]
+    branches: [main]
 
 jobs:
   build:

@@ -15,6 +15,7 @@ type PageKey =
   | "templates"
   | "reports"
   | "chips-users"
+  | "settings"
   | "profile";
 
 type AnyRecord = Record<string, any>;
@@ -27,6 +28,7 @@ const PAGE_PATHS: Record<PageKey, string> = {
   templates: "modelos-mensagens",
   reports: "relatorios",
   "chips-users": "chips-usuarios",
+  settings: "configuracoes",
   profile: "meu-perfil",
 };
 
@@ -1256,6 +1258,8 @@ function ReportsView({
   notify: (text: string, tone?: "success" | "error") => void;
 }) {
   const [data, setData] = useState<AnyRecord | null>(null);
+  const [reportTab, setReportTab] = useState<"overview" | "performance">("overview");
+  const [period, setPeriod] = useState("month");
   useEffect(() => {
     api("reports")
       .then(setData)
@@ -1269,17 +1273,28 @@ function ReportsView({
   return (
     <div className="page-stack">
       <div className="segmented-tabs two">
-        <button className="active">Visão Geral</button>
-        <button>Meu Desempenho</button>
+        <button className={reportTab === "overview" ? "active" : ""} onClick={() => setReportTab("overview")}>Visão Geral</button>
+        <button className={reportTab === "performance" ? "active" : ""} onClick={() => setReportTab("performance")}>Meu Desempenho</button>
       </div>
+      <section className="report-periods" aria-label="Período do relatório">
+        {[['day','Dia'],['week','Semana'],['month','Mês'],['custom','Período personalizado']].map(([key,label]) => (
+          <button key={key} className={period === key ? "active" : ""} onClick={() => setPeriod(key)}>{label}</button>
+        ))}
+      </section>
       <section className="report-metrics">
         {[
-          ["Contatos", data.total, "orange"],
-          ["Na fila", data.pending, "blue"],
-          ["Em recuperação", data.recovery, "red"],
-          ["Recuperados", data.recovered, "green"],
-          ["Agendamentos", data.appointments, "purple"],
-          ["Contratos", data.contracts, "gold"],
+          ["Primeiras mensagens enviadas", data.first_messages ?? 0, "orange"],
+          ["Sem resposta", data.no_response ?? data.distribution?.["Sem resposta"] ?? 0, "red"],
+          ["Áudios enviados", data.audios ?? data.distribution?.["Áudio enviado"] ?? 0, "blue"],
+          ["Agendamentos", data.appointments ?? 0, "purple"],
+          ["Reuniões realizadas", data.meetings ?? 0, "green"],
+          ["Contratos fechados", data.contracts ?? 0, "gold"],
+          ["Contatos sem WhatsApp", data.no_whatsapp ?? 0, "red"],
+          ["Em recuperação", data.recovery ?? 0, "orange"],
+          ["Recuperados", data.recovered ?? 0, "green"],
+          ["Enganos", data.mistakes ?? 0, "red"],
+          ["Telefones inválidos", data.invalid_phones ?? 0, "orange"],
+          ["Clientes com advogado", data.with_lawyer ?? 0, "blue"],
         ].map(([label, value, tone]) => (
           <article className={`report-metric ${tone}`} key={String(label)}>
             <span>{label}</span>
@@ -1293,10 +1308,11 @@ function ReportsView({
             <p className="eyebrow">DISTRIBUIÇÃO DE RESULTADOS</p>
             <h2>Situação atual dos contatos</h2>
           </div>
-          <select defaultValue="month">
+          <select value={period} onChange={(event) => setPeriod(event.target.value)}>
             <option value="day">Dia</option>
             <option value="week">Semana</option>
             <option value="month">Mês</option>
+            <option value="custom">Período personalizado</option>
           </select>
         </div>
         <div className="bar-list">
@@ -1584,6 +1600,23 @@ function ProfileView({ profile }: { profile: AnyRecord }) {
   );
 }
 
+function SettingsView() {
+  return (
+    <div className="page-stack">
+      <section className="settings-card">
+        <p className="eyebrow">CONFIGURAÇÕES</p>
+        <h2>Preferências do PROSPEC KR</h2>
+        <p>As regras operacionais aprovadas estão ativas. WhatsApp permanece preparado, mas desconectado.</p>
+        <div className="settings-list">
+          <span><strong>Tema</strong><small>Escuro · paleta final aprovada</small></span>
+          <span><strong>Fuso horário</strong><small>America/Porto_Velho</small></span>
+          <span><strong>Acesso atual</strong><small>Sessão administrativa direta</small></span>
+        </div>
+      </section>
+    </div>
+  );
+}
+
 export default function ProspecDashboard() {
   const [page, setPage] = useState<PageKey>(pageFromLocation);
   const [bootstrap, setBootstrap] = useState<AnyRecord | null>(null);
@@ -1659,6 +1692,7 @@ export default function ProspecDashboard() {
     templates: ["Modelos de Mensagens", "Crie suas bibliotecas de abordagem."],
     reports: ["Relatórios", "Resultados, evolução e desempenho."],
     "chips-users": ["Chips e Usuários", "Saúde dos chips, convites e permissões."],
+    settings: ["Configurações", "Preferências e regras do sistema."],
     profile: ["Meu Perfil", "Seus dados e acesso ao sistema."],
   };
 
@@ -1693,6 +1727,7 @@ export default function ProspecDashboard() {
           {[
             ...nav.filter(([key]) => key !== "profile"),
             ["templates", "Modelos de Mensagens", "✎"] as [PageKey, string, string],
+            ...(role === "admin" ? [["settings", "Configurações", "⚙"] as [PageKey, string, string]] : []),
             ["profile", "Meu Perfil", "○"] as [PageKey, string, string],
           ]
             .filter(
@@ -1726,6 +1761,7 @@ export default function ProspecDashboard() {
         {activePage === "chips-users" && role === "admin" ? (
           <ChipsUsersView notify={notify} />
         ) : null}
+        {activePage === "settings" && role === "admin" ? <SettingsView /> : null}
         {activePage === "profile" ? (
           <ProfileView profile={bootstrap.profile} />
         ) : null}
