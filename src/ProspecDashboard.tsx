@@ -1208,6 +1208,7 @@ type FunnelStage = { id: string; name: string; color: string; icon: string; desc
 type FunnelDefinition = { id: string; name: string; description: string; color: string; icon: string; stages: FunnelStage[]; archived?: boolean };
 const FUNNEL_TABS = ["Visão Geral", "Funis", "Etapas", "Automações", "Regras", "Gatilhos"] as const;
 const stageId = () => `stage-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+const newFunnelStages = () => ["Etapa 1", "Etapa 2", "Etapa 3", "Etapa 4", "Etapa 5", "Etapa 6"];
 
 function FunnelView({
   notify,
@@ -1228,7 +1229,7 @@ function FunnelView({
   const [showActivity, setShowActivity] = useState(true);
   const [mobileMenu, setMobileMenu] = useState(false);
   const [wizardStep, setWizardStep] = useState(1);
-  const [draft, setDraft] = useState({ name: "", description: "", color: "#B53F0D", icon: "◈", stages: ["Nova etapa", "Etapa seguinte"] });
+  const [draft, setDraft] = useState({ name: "", description: "", color: "#B53F0D", icon: "◈", stages: newFunnelStages() });
   const [search, setSearch] = useState("");
   const selected = funnels.find((item) => item.id === selectedId) || funnels.find((item) => !item.archived);
   useEffect(() => { localStorage.setItem("prospec-custom-funnels", JSON.stringify(funnels)); }, [funnels]);
@@ -1237,7 +1238,7 @@ function FunnelView({
     if (!draft.name.trim()) { notify("Informe o nome do funil.", "error"); return; }
     const funnel: FunnelDefinition = { id: `funnel-${Date.now()}`, name: draft.name.trim(), description: draft.description.trim(), color: draft.color, icon: draft.icon, stages: draft.stages.filter(Boolean).map((name, index) => ({ id: stageId(), name, color: index % 2 ? "#306D64" : draft.color, icon: "●", description: "", sla: "24h" })) };
     setFunnels((items) => [...items, funnel]); setSelectedId(funnel.id); setShowWizard(false); setWizardStep(1); setTab("Visão Geral");
-    setDraft({ name: "", description: "", color: "#B53F0D", icon: "◈", stages: ["Nova etapa", "Etapa seguinte"] }); notify("Funil criado com sucesso.");
+    setDraft({ name: "", description: "", color: "#B53F0D", icon: "◈", stages: newFunnelStages() }); notify(`Funil criado com ${funnel.stages.length} blocos de etapas.`);
   };
   const duplicate = (funnel: FunnelDefinition) => setFunnels((items) => [...items, { ...funnel, id: `funnel-${Date.now()}`, name: `${funnel.name} — cópia`, stages: funnel.stages.map((stage) => ({ ...stage, id: stageId() })) }]);
   const updateSelected = (change: Partial<FunnelDefinition>) => selected && setFunnels((items) => items.map((item) => item.id === selected.id ? { ...item, ...change } : item));
