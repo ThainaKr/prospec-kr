@@ -44,7 +44,8 @@ const DIRECT_ADMIN_PROFILE_ID = "0cbdd1a9-6cbe-402f-a161-96222aa35ea9";
 
 async function authenticate(request: Request) {
   const authorization = request.headers.get("Authorization") ?? "";
-  const token = authorization.replace(/^Bearer\s+/i, "").trim();
+  const apiKey = request.headers.get("apikey") ?? "";
+  const token = authorization.replace(/^Bearer\s+/i, "").trim() || apiKey.trim();
   if (!token) throw new Error("Requisição do aplicativo não identificada.");
 
   const { data: userData } = await admin.auth.getUser(token);
