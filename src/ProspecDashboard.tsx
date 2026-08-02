@@ -231,242 +231,55 @@ function Header({
 
 function HomeView({
   bootstrap,
-  role,
-  notify,
+  onNavigate,
 }: {
   bootstrap: AnyRecord;
-  role: string;
-  notify: (text: string, tone?: "success" | "error") => void;
+  onNavigate: (page: PageKey) => void;
 }) {
-  const lists = bootstrap.lists || [];
-  const [listId, setListId] = useState(bootstrap.work_state?.selected_list_id || "");
-  const [messageType, setMessageType] = useState(
-    role === "admin" ? (bootstrap.work_state?.message_type || "") : "follow_up",
-  );
-  const [queue, setQueue] = useState<AnyRecord[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [templateCount, setTemplateCount] = useState(0);
-  const [queueCount, setQueueCount] = useState(0);
-  const [chipCount, setChipCount] = useState(0);
-  const [results, setResults] = useState<Record<string, string>>({});
-  const [inProgress, setInProgress] = useState<Record<string, boolean>>({});
-
-  const loadQueue = useCallback(async () => {
-    if (!listId || !messageType) {
-      setQueue([]);
-      return;
-    }
-    setLoading(true);
-    try {
-      const data = await api("home", { listId, messageType });
-      setQueue(data.queue || []);
-      setQueueCount(data.queue_count || 0);
-      setTemplateCount(data.template_count || 0);
-      setChipCount(data.chip_count || 0);
-    } catch (error) {
-      notify(error instanceof Error ? error.message : "Falha ao carregar.", "error");
-    } finally {
-      setLoading(false);
-    }
-  }, [listId, messageType, notify]);
-
-  useEffect(() => {
-    loadQueue();
-  }, [loadQueue]);
-
-  const persistSelection = async (nextListId: string, nextMessageType: string) => {
-    try {
-      await api("save_work_state", { listId: nextListId, messageType: nextMessageType });
-    } catch {
-      // Mantém a tela utilizável; a próxima escolha tentará salvar novamente.
-    }
-  };
-
-  const chooseList = (nextListId: string) => {
-    setListId(nextListId);
-    persistSelection(nextListId, messageType);
-  };
-
-  const chooseMessageType = (nextMessageType: string) => {
-    setMessageType(nextMessageType);
-    persistSelection(listId, nextMessageType);
-  };
-
-  const openWhatsApp = async (contact: AnyRecord) => {
-    const phone = contact.phones?.[0];
-    if (!phone) {
-      notify("Este contato não possui telefone válido.", "error");
-      return;
-    }
-    if (!contact.chip?.id || contact.chip.status !== "active") {
-      notify("Nenhum chip ativo está disponível para este contato.", "error");
-      return;
-    }
-    const text = contact.template?.body
-      ? substituteTemplate(contact.template.body, contact)
-      : "";
-    const href = buildWhatsAppOpeningUrl(
-      contact.chip,
-      phone.phone_normalized || phone.phone_original,
-      text,
-    );
-    if (!href) {
-      notify(`Revise o método de abertura cadastrado para o chip +${contact.chip.number}.`, "error");
-      return;
-    }
-    try {
-      await api("mark_in_progress", {
-        contactId: contact.id,
-        phoneId: phone.id,
-        templateId: contact.template?.id,
-        chipId: contact.chip?.id,
-      });
-      setInProgress((current) => ({ ...current, [contact.id]: true }));
-      window.location.href = href;
-    } catch (error) {
-      notify(error instanceof Error ? error.message : "Não foi possível marcar em andamento.", "error");
-    }
-  };
-
-  const saveResult = async (contact: AnyRecord) => {
-    const result = results[contact.id];
-    if (!result) {
-      notify("Escolha o resultado antes de salvar.", "error");
-      return;
-    }
-    try {
-      await api("record_result", {
-        contactId: contact.id,
-        phoneId: contact.phones?.[0]?.id,
-        result,
-      });
-      notify(
-        result === "Sem WhatsApp" || result === "Telefone inválido"
-          ? "Contato enviado para Recuperação."
-          : "Resultado registrado.",
-      );
-      setQueue((current) => current.filter((item) => item.id !== contact.id));
-      window.setTimeout(loadQueue, 250);
-    } catch (error) {
-      notify(error instanceof Error ? error.message : "Não foi possível salvar.", "error");
-    }
-  };
+  const counters = bootstrap.counters || {};
+  const metrics = [
+    ["Contatos", counters.contacts || 0, "lists"],
+    ["Listas ativas", counters.lists || bootstrap.lists?.length || 0, "lists"],
+    ["Notificações", counters.notifications || 0, "notifications"],
+    ["Reuniões", counters.appointments || 0, "agenda"],
+    ["Chips ativos", counters.active_chips || 0, "chips-users"],
+    ["Equipe", counters.users || 1, "chips-users"],
+  ] as Array<[string, number, PageKey]>;
 
   return (
     <div className="page-stack">
-      <section className="hero-card">
+      <section className="home-welcome-card">
         <div>
-          <p className="eyebrow">FILA DE PROSPECÇÃO</p>
-          <h2>Escolha uma lista para começar</h2>
-          <p>Primeiro selecione a lista. Depois defina a abordagem da fila.</p>
+          <p className="eyebrow">VISÃO GERAL DA OPERAÇÃO</p>
+          <h2>Bem-vinda, {firstWord(bootstrap.profile?.full_name || "Thainá")}</h2>
+          <p>Acompanhe o trabalho da equipe, os contatos e os resultados em um só lugar.</p>
         </div>
-        <span className="hero-count">{bootstrap.counters?.contacts || 0}</span>
+        <button className="primary-button" onClick={() => onNavigate("funnel")}>Abrir Funil</button>
       </section>
-
-      <section className="selector-card">
-        <label>
-          <span>1. Planilha / lista</span>
-          <select value={listId} onChange={(event) => chooseList(event.target.value)}>
-            <option value="">Selecione a lista</option>
-            {lists.map((list: AnyRecord) => (
-              <option key={list.id} value={list.id}>
-                {list.name} ({list.contacts_count})
-              </option>
-            ))}
-          </select>
-        </label>
-        <div className="approach-picker">
-          <span>2. Tipo de mensagem</span>
-          <div>
-            <button
-              className={messageType === "first_message" ? "active" : ""}
-              onClick={() => chooseMessageType("first_message")}
-              disabled={!listId || role !== "admin"}
-            >
-              1ª mensagem
-            </button>
-            <button
-              className={messageType === "follow_up" ? "active" : ""}
-              onClick={() => chooseMessageType("follow_up")}
-              disabled={!listId}
-            >
-              Follow-up
-            </button>
+      <section className="home-metrics-grid">
+        {metrics.map(([label, value, target]) => (
+          <button className="home-metric-card" key={label} onClick={() => onNavigate(target)}>
+            <span>{label}</span><strong>{value}</strong><small>Ver detalhes →</small>
+          </button>
+        ))}
+      </section>
+      <section className="home-overview-grid">
+        <article className="chart-card">
+          <p className="eyebrow">ATALHOS DA OPERAÇÃO</p><h2>Acesso rápido</h2>
+          <div className="home-actions">
+            <button onClick={() => onNavigate("funnel")}><b>▽</b><span><strong>Funil</strong><small>Acompanhar todas as etapas</small></span></button>
+            <button onClick={() => onNavigate("lists")}><b>☷</b><span><strong>Listas e Contatos</strong><small>Gerenciar a prospecção</small></span></button>
+            <button onClick={() => onNavigate("agenda")}><b>▦</b><span><strong>Agenda</strong><small>Ver reuniões da equipe</small></span></button>
+            <button onClick={() => onNavigate("reports")}><b>▥</b><span><strong>Relatórios</strong><small>Analisar desempenho</small></span></button>
           </div>
-        </div>
-        {messageType && listId ? (
-          <p className="helper-text">
-            {queueCount} contato(s) nesta fila · {templateCount} modelo(s) · {chipCount} chip(s) ativo(s).
-            {!templateCount ? " O WhatsApp abrirá sem texto." : ""}
-          </p>
-        ) : null}
+        </article>
+        <article className="chart-card home-attention">
+          <p className="eyebrow">PRECISA DE ATENÇÃO</p><h2>Pendências de hoje</h2>
+          <button onClick={() => onNavigate("notifications")}><span>Notificações pendentes</span><strong>{counters.notifications || 0}</strong></button>
+          <button onClick={() => onNavigate("agenda")}><span>Reuniões agendadas</span><strong>{counters.appointments || 0}</strong></button>
+          <button onClick={() => onNavigate("chips-users")}><span>Alertas de chips</span><strong>{counters.chip_alerts || 0}</strong></button>
+        </article>
       </section>
-
-      {!listId || !messageType ? (
-        <EmptyState
-          icon="↗"
-          title="A fila aparece depois das duas escolhas"
-          text="Selecione a lista e o tipo de mensagem para carregar os próximos cinco contatos."
-        />
-      ) : loading ? (
-        <LoadingBlock label="Preparando os próximos contatos..." />
-      ) : queue.length === 0 ? (
-        <EmptyState
-          icon="✓"
-          title="Nenhum contato disponível nesta fila"
-          text="Os contatos concluídos ou em Recuperação não aparecem aqui."
-        />
-      ) : (
-        <section className="queue-grid">
-          {queue.map((contact, index) => (
-            <article className="contact-card" key={contact.id}>
-              <div className="contact-card-head">
-                <span className="queue-number">{index + 1}</span>
-                <div>
-                  <h3>{titleCaseFirst(contact.full_name)}</h3>
-                  <p>{titleCaseFirst(contact.company) || "Empresa não informada"}</p>
-                </div>
-                <span className={`status-pill ${inProgress[contact.id] || contact.queue_status === "in_progress" ? "active" : "waiting"}`}>
-                  {inProgress[contact.id] || contact.queue_status === "in_progress" ? "Em andamento" : "Na fila"}
-                </span>
-              </div>
-              <div className="contact-meta">
-                <span>{maskCpf(contact.cpf)}</span>
-                <span>{contact.phones?.length || 0} telefone(s)</span>
-                {contact.template ? <span>{contact.template.name}</span> : null}
-                {contact.chip ? <span>Chip: {contact.chip.name} · +{contact.chip.number}</span> : <span>Sem chip ativo</span>}
-              </div>
-              {contact.template?.body ? (
-                <div className="message-preview">
-                  {substituteTemplate(contact.template.body, contact)}
-                </div>
-              ) : null}
-              <div className="contact-actions">
-                <button className="whatsapp-button" onClick={() => openWhatsApp(contact)}>
-                  WhatsApp
-                </button>
-                <select
-                  value={results[contact.id] || ""}
-                  onChange={(event) =>
-                    setResults((current) => ({
-                      ...current,
-                      [contact.id]: event.target.value,
-                    }))
-                  }
-                >
-                  <option value="">Resultado</option>
-                  {RESULT_OPTIONS.map((result) => (
-                    <option key={result}>{result}</option>
-                  ))}
-                </select>
-                <button className="outline-button compact" onClick={() => saveResult(contact)}>
-                  Salvar
-                </button>
-              </div>
-            </article>
-          ))}
-        </section>
-      )}
     </div>
   );
 }
@@ -1842,7 +1655,7 @@ export default function ProspecDashboard() {
       {menuOpen ? <button className="drawer-backdrop" onClick={() => setMenuOpen(false)} /> : null}
 
       <main className="app-content">
-        {activePage === "home" ? <HomeView bootstrap={bootstrap} role={role} notify={notify} /> : null}
+        {activePage === "home" ? <HomeView bootstrap={bootstrap} onNavigate={go} /> : null}
         {activePage === "funnel" ? <FunnelView notify={notify} /> : null}
         {activePage === "notifications" ? <NotificationsView notify={notify} /> : null}
         {activePage === "agenda" ? <AgendaView notify={notify} /> : null}
