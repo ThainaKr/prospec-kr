@@ -236,49 +236,101 @@ function HomeView({
   bootstrap: AnyRecord;
   onNavigate: (page: PageKey) => void;
 }) {
-  const counters = bootstrap.counters || {};
-  const metrics = [
-    ["Contatos", counters.contacts || 0, "lists"],
-    ["Listas ativas", counters.lists || bootstrap.lists?.length || 0, "lists"],
-    ["Notificações", counters.notifications || 0, "notifications"],
-    ["Reuniões", counters.appointments || 0, "agenda"],
-    ["Chips ativos", counters.active_chips || 0, "chips-users"],
-    ["Equipe", counters.users || 1, "chips-users"],
-  ] as Array<[string, number, PageKey]>;
+  const [selectedConversation, setSelectedConversation] = useState(0);
+  const [composerTab, setComposerTab] = useState<"message" | "audio">("audio");
+  const [message, setMessage] = useState("");
+  const [mobileMenu, setMobileMenu] = useState(false);
+  const profileName = bootstrap.profile?.full_name || "Thainá Krause";
+  const conversations = [
+    { name: "Carlos Eduardo Silva", company: "Bradesco Premium", time: "09:42", state: "Primeira mensagem enviada", tone: "green", unread: 2, initials: "CE" },
+    { name: "Juliana Martins", company: "Itaú Empresas", time: "09:41", state: "Aguardando resposta", tone: "orange", unread: 1, initials: "JM" },
+    { name: "Roberto Almeida", company: "Santander PJ", time: "09:40", state: "Aguardando resposta", tone: "orange", unread: 0, initials: "RA" },
+    { name: "Fernanda Costa", company: "Bradesco Premium", time: "09:36", state: "Áudio enviado", tone: "petrol", unread: 0, initials: "FC" },
+    { name: "Ricardo Oliveira", company: "Itaú Empresas", time: "09:30", state: "Follow-up", tone: "red", unread: 0, initials: "RO" },
+    { name: "Amanda Souza", company: "Santander PJ", time: "09:25", state: "Primeira mensagem enviada", tone: "green", unread: 1, initials: "AS" },
+  ];
+  const current = conversations[selectedConversation];
+  const audioModels = [
+    ["01 - Saudação e apresentação", "00:28"],
+    ["02 - Apresentação do serviço", "00:31"],
+    ["03 - Quebra de objeção", "00:25"],
+    ["04 - Agendamento de reunião", "00:28"],
+    ["05 - Follow-up", "00:26"],
+  ];
+  const kpis = [
+    ["Primeiras mensagens", "18 / 40", "45%", "orange"],
+    ["Com resposta", "12 / 18", "66,7%", "green"],
+    ["Sem resposta", "6 / 18", "33,3%", "amber"],
+    ["Áudios enviados", "9", "Hoje", "petrol"],
+    ["Agendamentos", "4", "Hoje", "yellow"],
+    ["Reuniões realizadas", "2", "Hoje", "rust"],
+    ["Contratos", "1", "Hoje", "success"],
+  ];
 
   return (
-    <div className="page-stack">
-      <section className="home-welcome-card">
-        <div>
-          <p className="eyebrow">VISÃO GERAL DA OPERAÇÃO</p>
-          <h2>Bem-vinda, {firstWord(bootstrap.profile?.full_name || "Thainá")}</h2>
-          <p>Acompanhe o trabalho da equipe, os contatos e os resultados em um só lugar.</p>
+    <div className="operations-home">
+      <aside className={`operations-sidebar ${mobileMenu ? "open" : ""}`}>
+        <div className="operations-brand"><i>PROSPEC</i><b>KR</b><button onClick={() => setMobileMenu(false)}>×</button></div>
+        <nav>
+          <button className="active"><span>⌂</span><b>Atendimento<small>Converse e avance</small></b></button>
+          <button onClick={() => onNavigate("home")}><span>⌂</span><b>Início<small>Visão geral</small></b></button>
+          <button onClick={() => onNavigate("lists")}><span>♙</span><b>Listas e Contatos<small>Suas listas e leads</small></b></button>
+          <button onClick={() => onNavigate("templates")}><span>▤</span><b>Modelos<small>Mensagens e áudios</small></b></button>
+          <button onClick={() => onNavigate("agenda")}><span>▦</span><b>Agenda<small>Compromissos</small></b></button>
+          <button onClick={() => onNavigate("reports")}><span>▥</span><b>Relatórios<small>Desempenho</small></b></button>
+          <button onClick={() => onNavigate("chips-users")}><span>◉</span><b>Chips<small>Gerencie seus chips</small></b></button>
+          <button onClick={() => onNavigate("settings")}><span>⚙</span><b>Configurações<small>Preferências</small></b></button>
+          <button><span>?</span><b>Ajuda<small>Central de suporte</small></b></button>
+        </nav>
+        <section className="chip-health-card">
+          <h3>SAÚDE DO CHIP ATUAL</h3>
+          <div className="health-gauge"><strong>82%</strong><small>Saudável</small></div>
+          <label>Mensagens hoje <b>32 / 80</b><i><em style={{ width: "40%" }} /></i></label>
+          <label>1ª mensagens <b>18 / 40</b><i><em style={{ width: "45%" }} /></i></label>
+          <button onClick={() => onNavigate("chips-users")}>Ver detalhes do chip</button>
+        </section>
+      </aside>
+      {mobileMenu ? <button className="operations-backdrop" onClick={() => setMobileMenu(false)} /> : null}
+
+      <section className="operations-main">
+        <header className="operations-topbar">
+          <button className="operations-menu-button" onClick={() => setMobileMenu(true)}>☰</button>
+          <div className="mobile-operations-brand"><i>PROSPEC</i><b>KR</b></div>
+          <div className="active-chip"><small>Chip ativo</small><button><i /> <b>Chip 02</b><span>+55 47 9 8405-980</span>⌄</button></div>
+          <button className="switch-chip">⇄ <span>Trocar chip</span></button>
+          <div className="topbar-spacer" />
+          <button className="topbar-icon">⌕</button><button className="topbar-icon notification-dot">♧</button>
+          <button className="profile-button"><span className="avatar small-avatar">TK</span><b>{profileName}<small>Administradora</small></b>⌄</button>
+        </header>
+
+        <div className="operations-workspace">
+          <section className="conversation-column">
+            <header><p>ATENDIMENTO</p><h2>CONVERSAS DO DIA</h2><button>≡</button></header>
+            <div className="conversation-filters"><input type="date" defaultValue="2025-05-15"/><input placeholder="⌕  Buscar contato..."/><div><button className="active">Todas <b>32</b></button><button>Com resposta <b>12</b></button><button>Sem resposta <b>20</b></button></div></div>
+            <div className="conversation-list">
+              {conversations.map((item, index) => <button key={item.name} className={selectedConversation === index ? "selected" : ""} onClick={() => setSelectedConversation(index)}><span className={`avatar tone-${item.tone}`}>{item.initials}</span><span><strong>{item.name}</strong><small>{item.company}</small><em className={`tone-${item.tone}`}>◆ {item.state}</em></span><time>{item.time}</time>{item.unread ? <b>{item.unread}</b> : <i>✓</i>}</button>)}
+            </div>
+            <button className="full-history">Ver histórico completo</button>
+          </section>
+
+          <section className="professional-chat">
+            <header className="chat-contact-header"><span className="avatar tone-orange">{current.initials}</span><div><h2>{current.name}</h2><p>+55 11 98765-4321 <b>{current.company}</b><em>Primeira mensagem</em></p></div><div><button>☆</button><button>⌕</button><button>⋮</button></div></header>
+            <div className="chat-messages"><span className="day-marker">Hoje</span><div className="incoming-message"><b className="avatar tiny-avatar">CE</b><p>Bom dia! Recebi sua mensagem, pode me explicar melhor?<small>09:41</small></p></div><div className="outgoing-message"><p>Bom dia, Carlos! Claro, posso sim te explicar.<small>09:41 ✓✓</small></p></div><div className="outgoing-message audio-bubble"><button>▶</button><div><i className="waveform"/><small>00:27</small></div><time>09:42 ✓✓</time></div><div className="incoming-message"><b className="avatar tiny-avatar">CE</b><p>Entendi, faz sentido. Vamos agendar uma reunião?<small>09:43</small></p></div><div className="outgoing-message"><p>Perfeito! Vou verificar alguns horários e te envio.<small>09:43 ✓✓</small></p></div></div>
+            <section className="chat-composer">
+              <div className="composer-tabs"><button className={composerTab === "message" ? "active" : ""} onClick={() => setComposerTab("message")}>Mensagem</button><button className={composerTab === "audio" ? "active" : ""} onClick={() => setComposerTab("audio")}>Áudio</button></div>
+              {composerTab === "audio" ? <div className="audio-library"><div className="audio-models"><input placeholder="⌕  Buscar modelo de áudio..."/><div className="audio-categories"><button>Todos</button><button className="active">Primeira mensagem</button><button>Apresentação</button><button>Objeções</button><button>Agendamento</button><button>Follow-up</button></div>{audioModels.map(([name,duration]) => <button className="audio-model" key={name}><span>▶</span><b>{name}</b><small>{duration}</small><i className="mini-wave"/>☆ ⋮</button>)}</div><div className="record-audio"><span>♩</span><strong>Gravar áudio</strong><small>ou selecione um arquivo<br/>MP3, M4A ou OGG</small><button>Selecionar arquivo</button></div></div> : <textarea value={message} onChange={(event) => setMessage(event.target.value)} placeholder="Digite sua mensagem..."/>}
+              <div className="composer-actions"><button>☺</button><button>⌕</button><button onClick={() => setMessage((value) => `${value}{NOME}`)}>{'{NOME}'}</button><button onClick={() => setMessage((value) => `${value}{EMPRESA}`)}>{'{EMPRESA}'}</button><span/><button className="send-message">Enviar ▾</button><button className="send-icon">➤</button></div>
+            </section>
+          </section>
+
+          <aside className="client-panel">
+            <section className="contact-card-panel"><header>CARTÃO DO CONTATO <button>⌃</button></header><div className="contact-portrait"><span className="avatar large-avatar tone-orange">{current.initials}</span><h2>{current.name}</h2><p>+55 11 98765-4321</p></div><dl><div><dt>▤ Empresa</dt><dd>Silva Transportes Ltda</dd></div><div><dt>♙ Cargo</dt><dd>Diretor Financeiro</dd></div><div><dt>⌂ Origem</dt><dd>Bradesco Premium</dd></div><div><dt>◇ Status atual</dt><dd><em>Aguardando resposta</em></dd></div><div><dt>▦ Próximo contato</dt><dd>21/05/2025 · 14:00</dd></div></dl><button className="view-contact">Ver cartão completo →</button></section>
+            <section className="interaction-history"><header>HISTÓRICO DE INTERAÇÕES <button>Ver todos</button></header>{[["♩","Áudio enviado (00:27)","09:42"],["▤","Mensagem enviada","09:41"],["▣","Contato aberto","09:41"]].map(([icon,label,time]) => <div key={label}><span>{icon}</span><p><small>15/05/2025 · {time}</small>{label}</p><b>✓</b></div>)}</section>
+            <section className="quick-actions"><header>AÇÕES RÁPIDAS</header><div><button>▦ Agendar reunião</button><button>♧ Adicionar lembrete</button><button>⇄ Transferir contato</button><button>◉ Abrir WhatsApp</button><button>♙ Ver no CRM</button><button>◷ Histórico completo</button></div></section>
+          </aside>
         </div>
-        <button className="primary-button" onClick={() => onNavigate("funnel")}>Abrir Funil</button>
-      </section>
-      <section className="home-metrics-grid">
-        {metrics.map(([label, value, target]) => (
-          <button className="home-metric-card" key={label} onClick={() => onNavigate(target)}>
-            <span>{label}</span><strong>{value}</strong><small>Ver detalhes →</small>
-          </button>
-        ))}
-      </section>
-      <section className="home-overview-grid">
-        <article className="chart-card">
-          <p className="eyebrow">ATALHOS DA OPERAÇÃO</p><h2>Acesso rápido</h2>
-          <div className="home-actions">
-            <button onClick={() => onNavigate("funnel")}><b>▽</b><span><strong>Funil</strong><small>Acompanhar todas as etapas</small></span></button>
-            <button onClick={() => onNavigate("lists")}><b>☷</b><span><strong>Listas e Contatos</strong><small>Gerenciar a prospecção</small></span></button>
-            <button onClick={() => onNavigate("agenda")}><b>▦</b><span><strong>Agenda</strong><small>Ver reuniões da equipe</small></span></button>
-            <button onClick={() => onNavigate("reports")}><b>▥</b><span><strong>Relatórios</strong><small>Analisar desempenho</small></span></button>
-          </div>
-        </article>
-        <article className="chart-card home-attention">
-          <p className="eyebrow">PRECISA DE ATENÇÃO</p><h2>Pendências de hoje</h2>
-          <button onClick={() => onNavigate("notifications")}><span>Notificações pendentes</span><strong>{counters.notifications || 0}</strong></button>
-          <button onClick={() => onNavigate("agenda")}><span>Reuniões agendadas</span><strong>{counters.appointments || 0}</strong></button>
-          <button onClick={() => onNavigate("chips-users")}><span>Alertas de chips</span><strong>{counters.chip_alerts || 0}</strong></button>
-        </article>
+
+        <footer className="operations-kpis">{kpis.map(([label,value,detail,tone]) => <article className={`kpi-${tone}`} key={label}><span>{label}</span><strong>{value}</strong><small>{detail}</small><i/></article>)}<button onClick={() => onNavigate("reports")}>▥ Ver relatórios completos</button></footer>
       </section>
     </div>
   );
@@ -1612,16 +1664,18 @@ export default function ProspecDashboard() {
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
+  const operationsMode = activePage === "home";
+
   return (
-    <div className="app-shell">
-      <Header
+    <div className={`app-shell ${operationsMode ? "operations-mode" : ""}`}>
+      {!operationsMode ? <Header
         title={titles[activePage][0]}
         subtitle={titles[activePage][1]}
         onMenu={() => setMenuOpen(true)}
         badge={bootstrap.counters?.notifications}
-      />
+      /> : null}
 
-      <aside className={`side-drawer ${menuOpen ? "open" : ""}`} aria-hidden={!menuOpen}>
+      {!operationsMode ? <aside className={`side-drawer ${menuOpen ? "open" : ""}`} aria-hidden={!menuOpen}>
         <div className="drawer-head">
           <div className="brand-mark small-mark">KR</div>
           <div>
@@ -1651,8 +1705,8 @@ export default function ProspecDashboard() {
               </button>
             ))}
         </nav>
-      </aside>
-      {menuOpen ? <button className="drawer-backdrop" onClick={() => setMenuOpen(false)} /> : null}
+      </aside> : null}
+      {!operationsMode && menuOpen ? <button className="drawer-backdrop" onClick={() => setMenuOpen(false)} /> : null}
 
       <main className="app-content">
         {activePage === "home" ? <HomeView bootstrap={bootstrap} onNavigate={go} /> : null}
@@ -1677,14 +1731,14 @@ export default function ProspecDashboard() {
         ) : null}
       </main>
 
-      <nav className="bottom-nav" aria-label="Navegação principal">
+      {!operationsMode ? <nav className="bottom-nav" aria-label="Navegação principal">
         {nav.map(([key, label, icon]) => (
           <button key={key} className={activePage === key ? "active" : ""} onClick={() => go(key)}>
             <span>{icon}</span>
             <small>{label}</small>
           </button>
         ))}
-      </nav>
+      </nav> : null}
 
       {toast ? (
         <Toast
