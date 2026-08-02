@@ -19,6 +19,15 @@
   color-scheme: dark;
 }
 
+.home-welcome-card{display:flex;align-items:center;justify-content:space-between;gap:24px;border:1px solid var(--border);border-radius:18px;background:linear-gradient(135deg,#111716,#090b0b 65%,rgba(181,63,13,.16));padding:24px}
+.home-welcome-card h2{margin:0;font-size:28px}.home-welcome-card p:not(.eyebrow){margin:7px 0 0;color:var(--muted)}
+.home-metrics-grid{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:10px}
+.home-metric-card{min-height:118px;display:grid;align-content:space-between;border:1px solid var(--border);border-radius:17px;background:linear-gradient(145deg,#101313,#090b0b);padding:15px;text-align:left}
+.home-metric-card:hover{border-color:var(--orange)}.home-metric-card span,.home-metric-card small{color:var(--muted);font-size:10px}.home-metric-card strong{color:var(--orange);font-size:27px}.home-metric-card small{color:var(--orange-2)}
+.home-overview-grid{display:grid;grid-template-columns:1.35fr 1fr;gap:12px}.home-actions{display:grid;grid-template-columns:repeat(2,1fr);gap:9px;margin-top:18px}.home-actions button{display:flex;align-items:center;gap:12px;border:1px solid #202b29;border-radius:13px;background:#0b0f0e;padding:14px;text-align:left}.home-actions button:hover{border-color:var(--orange)}.home-actions b{width:34px;height:34px;display:grid;place-items:center;border-radius:10px;background:rgba(181,63,13,.14);color:var(--orange)}.home-actions span,.home-actions strong,.home-actions small{display:block}.home-actions small{margin-top:3px;color:var(--muted);font-size:10px}.home-attention>button{width:100%;display:flex;align-items:center;justify-content:space-between;border-top:1px solid var(--border);padding:15px 0;text-align:left}.home-attention>button span{color:#bbb}.home-attention>button strong{min-width:30px;height:30px;display:grid;place-items:center;border-radius:999px;background:rgba(181,63,13,.16);color:var(--orange)}
+@media(max-width:919px){.home-metrics-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.home-overview-grid{grid-template-columns:1fr}}
+@media(max-width:639px){.home-welcome-card{align-items:stretch;flex-direction:column;padding:18px}.home-welcome-card h2{font-size:23px}.home-welcome-card .primary-button{width:100%}.home-metric-card{min-height:104px}.home-actions{grid-template-columns:1fr}}
+
 /* Funil oficial — integrado ao painel, não é uma rota de prévia. */
 .funnel-heading-card,.funnel-toolbar-card,.funnel-summary-card,.funnel-column{border:1px solid var(--border);background:linear-gradient(145deg,#101313,#090b0b);border-radius:18px}
 .funnel-heading-card{display:flex;align-items:center;justify-content:space-between;gap:18px;padding:20px}
