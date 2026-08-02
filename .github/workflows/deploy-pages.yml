@@ -2,7 +2,7 @@ name: Publicar PROSPEC KR
 
 on:
   push:
-    branches: ["main"]
+    branches: ["main", "agent/prospec-kr-visual-rebuild"]
   workflow_dispatch:
 
 permissions:
