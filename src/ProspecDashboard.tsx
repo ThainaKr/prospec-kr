@@ -7,6 +7,8 @@ import AgendaOfficial from "./AgendaOfficial";
 import ListsContactsOfficial from "./ListsContactsOfficial";
 import TemplatesOfficial from "./TemplatesOfficial";
 import ReportsOfficial from "./ReportsOfficial";
+import ChipsUsersOfficial from "./ChipsUsersOfficial";
+import NotificationsOfficial from "./NotificationsOfficial";
 import * as XLSX from "xlsx";
 import { supabase } from "./supabase";
 import { buildWhatsAppOpeningUrl, openingMethodLabel } from "./whatsappOpening";
@@ -1735,13 +1737,13 @@ export default function ProspecDashboard() {
       <main className="app-content">
         {activePage === "home" ? <HomeView bootstrap={bootstrap} onNavigate={go} /> : null}
         {activePage === "funnel" ? <FunnelView notify={notify} onNavigate={go} bootstrap={bootstrap} /> : null}
-        {activePage === "notifications" ? <NotificationsView notify={notify} /> : null}
+        {activePage === "notifications" ? <NotificationsOfficial role={role} bootstrap={bootstrap} notify={notify} apiAction={api} onNavigate={go} /> : null}
         {activePage === "agenda" ? <AgendaOfficial notify={notify} onNavigate={go} bootstrap={bootstrap} /> : null}
         {activePage === "lists" ? <ListsContactsOfficial bootstrap={bootstrap} notify={notify} onNavigate={go} apiAction={api} refreshBootstrap={refreshBootstrap} /> : null}
         {activePage === "templates" ? <TemplatesOfficial role={role} bootstrap={bootstrap} notify={notify} apiAction={api} onNavigate={go} /> : null}
         {activePage === "reports" ? <ReportsOfficial role={role} bootstrap={bootstrap} notify={notify} apiAction={api} onNavigate={go} /> : null}
         {activePage === "chips-users" && role === "admin" ? (
-          <ChipsUsersView notify={notify} />
+          <ChipsUsersOfficial bootstrap={bootstrap} notify={notify} apiAction={api} />
         ) : null}
         {activePage === "settings" && role === "admin" ? <SettingsView /> : null}
         {activePage === "profile" ? (
