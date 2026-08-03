@@ -601,15 +601,20 @@ async function saveChip(profile: Json, payload: Json) {
 
 async function getUsers(profile: Json) {
   requireAdmin(profile);
-  const [{ data: profiles }, { data: invites }] = await Promise.all([
+  const [{ data: profiles }, { data: invites }, { data: permissions }] = await Promise.all([
     admin.from("profiles").select("*").order("full_name"),
     admin
       .from("user_invitations")
       .select("*")
       .eq("active", true)
       .order("created_at", { ascending: false }),
+    admin.from("user_permissions").select("*"),
   ]);
-  return { profiles: profiles ?? [], invitations: invites ?? [] };
+  return {
+    profiles: profiles ?? [],
+    invitations: invites ?? [],
+    permissions: Object.fromEntries((permissions ?? []).map((item) => [item.user_id, item])),
+  };
 }
 
 async function inviteUser(profile: Json, payload: Json) {
@@ -678,6 +683,8 @@ async function updateUser(profile: Json, payload: Json) {
       role,
       status,
       active,
+      job_title: payload.jobTitle === undefined ? undefined : String(payload.jobTitle || "").trim() || null,
+      home_page: payload.homePage === undefined ? undefined : String(payload.homePage || "inicio"),
       blocked_at: status === "blocked" ? new Date().toISOString() : null,
     })
     .eq("id", userId);
@@ -715,17 +722,24 @@ async function getNotifications(profile: Json) {
     .order("created_at", { ascending: false })
     .limit(100);
   if (profile.role !== "admin") query = query.eq("recipient_id", profile.id);
-  const { data } = await query;
-  const unreadIds = (data ?? [])
-    .filter((item) => !item.read_at)
-    .map((item) => item.id);
-  if (unreadIds.length) {
-    await admin
-      .from("notifications")
-      .update({ read_at: new Date().toISOString() })
-      .in("id", unreadIds);
-  }
+  const { data, error } = await query;
+  if (error) throw error;
   return data ?? [];
+}
+
+async function markNotificationsRead(profile: Json, payload: Json) {
+  const ids = Array.isArray(payload.ids)
+    ? payload.ids.map((id) => String(id)).filter(Boolean).slice(0, 100)
+    : [];
+  if (!ids.length) return { ok: true, updated: 0 };
+  let query = admin
+    .from("notifications")
+    .update({ read_at: new Date().toISOString() })
+    .in("id", ids);
+  if (profile.role !== "admin") query = query.eq("recipient_id", profile.id);
+  const { data, error } = await query.select("id");
+  if (error) throw error;
+  return { ok: true, updated: data?.length ?? 0 };
 }
 
 async function getReports(profile: Json) {
@@ -1196,6 +1210,9 @@ Deno.serve(async (request: Request) => {
         break;
       case "notifications":
         data = await getNotifications(profile);
+        break;
+      case "mark_notifications_read":
+        data = await markNotificationsRead(profile, payload);
         break;
       case "reports":
         data = await getReports(profile);
