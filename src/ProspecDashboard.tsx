@@ -3,8 +3,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import AgendaOfficial from "./AgendaOfficial";
-import ListsContactsOfficial from "./ListsContactsOfficial";
 import TemplatesOfficial from "./TemplatesOfficial";
 import ReportsOfficial from "./ReportsOfficial";
 import ChipsUsersOfficial from "./ChipsUsersOfficial";
@@ -15,6 +13,7 @@ import { buildWhatsAppOpeningUrl, openingMethodLabel } from "./whatsappOpening";
 
 type PageKey =
   | "home"
+  | "attendance"
   | "funnel"
   | "notifications"
   | "agenda"
@@ -29,6 +28,7 @@ type AnyRecord = Record<string, any>;
 
 const PAGE_PATHS: Record<PageKey, string> = {
   home: "inicio",
+  attendance: "atendimento",
   funnel: "funil",
   notifications: "notificacoes",
   agenda: "agenda",
@@ -50,22 +50,28 @@ function pageFromLocation(): PageKey {
 
 const ADMIN_NAV: Array<[PageKey, string, string]> = [
   ["home", "Início", "⌂"],
-  ["funnel", "Funis", "▽"],
-  ["notifications", "Notificações", "●"],
+  ["attendance", "Atendimento", "◫"],
   ["agenda", "Agenda", "▦"],
-  ["lists", "Listas", "☷"],
+  ["lists", "Listas e Contatos", "☷"],
+  ["funnel", "Funis", "▽"],
+  ["templates", "Modelos de Mensagens e Áudios", "✎"],
+  ["notifications", "Notificações", "●"],
   ["reports", "Relatórios", "▥"],
   ["chips-users", "Chips e Usuários", "◉"],
+  ["settings", "Configurações", "⚙"],
+  ["profile", "Sair", "↪"],
 ];
 
 const LAWYER_NAV: Array<[PageKey, string, string]> = [
   ["home", "Início", "⌂"],
-  ["funnel", "Funis", "▽"],
-  ["notifications", "Notificações", "●"],
+  ["attendance", "Atendimento", "◫"],
   ["agenda", "Agenda", "▦"],
-  ["lists", "Listas", "☷"],
+  ["lists", "Listas e Contatos", "☷"],
+  ["funnel", "Funis", "▽"],
+  ["templates", "Modelos de Mensagens e Áudios", "✎"],
+  ["notifications", "Notificações", "●"],
   ["reports", "Relatórios", "▥"],
-  ["profile", "Mais", "•••"],
+  ["profile", "Sair", "↪"],
 ];
 
 const TEMPLATE_CATEGORIES = [
@@ -228,7 +234,7 @@ function Header({
         <p>{subtitle}</p>
       </div>
       <div className="header-logo" aria-label="PROSPEC KR">
-        <span>KR</span>
+        <img src="/prospec-kr/brand/prospec-kr-icon.png" alt="" />
         {badge ? <b>{badge > 99 ? "99+" : badge}</b> : null}
       </div>
     </header>
@@ -342,6 +348,83 @@ function HomeView({
 
         <footer className="operations-kpis">{kpis.map(([label,value,detail,tone], index) => <article className={`kpi-${tone}`} key={label}><span>{label}</span><strong>{value}</strong><small>{detail}</small><svg className="kpi-sparkline" viewBox="0 0 150 30" preserveAspectRatio="none" aria-hidden="true"><defs><linearGradient id={`spark-${index}`} x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="currentColor" stopOpacity=".34"/><stop offset="1" stopColor="currentColor" stopOpacity="0"/></linearGradient></defs><path d="M0 25 C8 25 8 18 16 20 S27 26 34 19 S45 12 52 21 S64 27 72 17 S83 10 91 20 S102 26 111 16 S124 10 132 19 S143 23 150 14 L150 30 L0 30Z" fill={`url(#spark-${index})`} stroke="none"/><path d="M0 25 C8 25 8 18 16 20 S27 26 34 19 S45 12 52 21 S64 27 72 17 S83 10 91 20 S102 26 111 16 S124 10 132 19 S143 23 150 14"/></svg></article>)}<button onClick={() => onNavigate("reports")}>▥ Ver relatórios completos</button></footer>
       </section>
+    </div>
+  );
+}
+
+function HomeCentral({
+  bootstrap,
+  onNavigate,
+  notify,
+}: {
+  bootstrap: AnyRecord;
+  onNavigate: (page: PageKey) => void;
+  notify: (text: string, tone?: "success" | "error") => void;
+}) {
+  const [contacts, setContacts] = useState<AnyRecord[]>([]);
+  const [selected, setSelected] = useState<AnyRecord | null>(null);
+  const [loadingContacts, setLoadingContacts] = useState(true);
+  const [search, setSearch] = useState("");
+
+  useEffect(() => {
+    let active = true;
+    api("contacts", { search })
+      .then((result) => {
+        if (!active) return;
+        const rows = result?.contacts || [];
+        setContacts(rows);
+        setSelected((current) => current || rows[0] || null);
+      })
+      .catch((error) => notify(error instanceof Error ? error.message : "Falha ao carregar atendimentos.", "error"))
+      .finally(() => active && setLoadingContacts(false));
+    return () => { active = false; };
+  }, [notify, search]);
+
+  const pendingNotifications = Number(bootstrap.counters?.notifications || 0);
+  return (
+    <div className="central-home" data-build="central-atendimento-v1">
+      <section className="central-toolbar">
+        <div>
+          <p className="eyebrow">CENTRAL DE ATENDIMENTO</p>
+          <h2>Olá, {firstWord(bootstrap.profile?.full_name || "Thainá")}</h2>
+          <p>Conversas, contatos e próximas ações em um único lugar.</p>
+        </div>
+        <div className="central-toolbar-actions">
+          <button className="secondary-button" onClick={() => onNavigate("notifications")}>Notificações <b>{pendingNotifications}</b></button>
+          <button className="primary-button" onClick={() => onNavigate("lists")}>Abrir prospecção</button>
+        </div>
+      </section>
+
+      <div className="central-grid">
+        <section className="central-conversations">
+          <header><div><p className="eyebrow">ATENDIMENTO</p><h3>Contatos da operação</h3></div><input aria-label="Pesquisar contatos" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Pesquisar contato..." /></header>
+          {loadingContacts ? <LoadingBlock label="Carregando contatos..." /> : contacts.length ? (
+            <div className="central-contact-list">{contacts.map((contact) => (
+              <button key={contact.id} className={selected?.id === contact.id ? "active" : ""} onClick={() => setSelected(contact)}>
+                <span className="avatar">{firstWord(contact.full_name).slice(0, 1)}</span>
+                <span><strong>{contact.full_name}</strong><small>{contact.company || "Empresa não informada"}</small></span>
+                <em>{contact.current_result || "Aguardando atendimento"}</em>
+              </button>
+            ))}</div>
+          ) : <EmptyState icon="◇" title="Nenhum atendimento disponível" text="Importe uma lista ou ajuste a pesquisa. Nenhum dado demonstrativo é exibido aqui." />}
+        </section>
+
+        <section className="central-thread">
+          {selected ? <>
+            <header><span className="avatar">{firstWord(selected.full_name).slice(0, 1)}</span><div><h3>{selected.full_name}</h3><p>{selected.company || "Empresa não informada"}</p></div></header>
+            <EmptyState icon="◌" title="Conversa sem mensagens sincronizadas" text="O histórico aparecerá após uma confirmação registrada pelo aparelho correspondente. O PROSPEC KR não simula envios do WhatsApp." />
+            <footer><button className="secondary-button" onClick={() => onNavigate("lists")}>Abrir ficha completa</button><button className="primary-button" onClick={() => notify("Selecione um número validado na ficha do contato para abrir o WhatsApp.")}>Abrir no aparelho</button></footer>
+          </> : <EmptyState icon="◇" title="Selecione um contato" text="Os dados reais da operação aparecerão aqui." />}
+        </section>
+
+        <aside className="central-summary">
+          <article><span>Contatos autorizados</span><strong>{bootstrap.counters?.contacts || 0}</strong></article>
+          <article><span>Em recuperação</span><strong>{bootstrap.counters?.recovery || 0}</strong></article>
+          <article><span>Notificações</span><strong>{pendingNotifications}</strong></article>
+          <section><h3>Arquitetura WhatsApp</h3><p>Cada aparelho Android mantém sua sessão. O CRM distribui e registra tarefas; a abertura ou confirmação ocorre no aparelho correto.</p><button onClick={() => onNavigate("chips-users")}>Ver dispositivos e chips</button></section>
+          <section><h3>Atalhos</h3><button onClick={() => onNavigate("agenda")}>Agenda</button><button onClick={() => onNavigate("reports")}>Relatórios</button><button onClick={() => onNavigate("templates")}>Modelos</button></section>
+        </aside>
+      </div>
     </div>
   );
 }
@@ -1603,6 +1686,44 @@ function SettingsView() {
   );
 }
 
+function SettingsOfficial({ notify }: { notify: (text: string, tone?: "success" | "error") => void }) {
+  const [data, setData] = useState<AnyRecord | null>(null);
+  const [form, setForm] = useState<AnyRecord>({});
+  const [tab, setTab] = useState("general");
+  const [saving, setSaving] = useState(false);
+  const tabs = [
+    ["general", "Geral"], ["roles", "Cargos e permissões"], ["users", "Usuários"],
+    ["whatsapp", "WhatsApp e chips"], ["models", "Modelos"], ["notifications", "Notificações"], ["security", "Segurança e auditoria"],
+  ];
+  useEffect(() => {
+    api("settings").then((result) => { setData(result); setForm(result.settings || {}); }).catch((error) => notify(error.message, "error"));
+  }, [notify]);
+  const save = async () => {
+    setSaving(true);
+    try { const saved = await api("save_settings", form); setForm(saved); notify("Configurações salvas no Supabase."); }
+    catch (error) { notify(error instanceof Error ? error.message : "Falha ao salvar.", "error"); }
+    finally { setSaving(false); }
+  };
+  if (!data) return <LoadingBlock label="Carregando configurações..." />;
+  return <div className="settings-official" data-build="settings-official-v1">
+    <nav className="settings-tabs">{tabs.map(([key, label]) => <button key={key} className={tab === key ? "active" : ""} onClick={() => setTab(key)}>{label}</button>)}</nav>
+    {tab === "general" ? <section className="settings-panel"><header><div><p className="eyebrow">GERAL</p><h2>Preferências da organização</h2></div><button className="primary-button" disabled={saving} onClick={save}>{saving ? "Salvando..." : "Salvar alterações"}</button></header><div className="settings-form-grid">
+      <label>Nome da empresa<input value={form.company_name || ""} onChange={(event) => setForm({ ...form, company_name: event.target.value })}/></label>
+      <label>Fuso horário<select value={form.timezone || "America/Porto_Velho"} onChange={(event) => setForm({ ...form, timezone: event.target.value })}><option>America/Porto_Velho</option><option>America/Sao_Paulo</option></select></label>
+      <label>Formato de data<select value={form.date_format || "dd/MM/yyyy"} onChange={(event) => setForm({ ...form, date_format: event.target.value })}><option value="dd/MM/yyyy">DD/MM/AAAA</option><option value="yyyy-MM-dd">AAAA-MM-DD</option></select></label>
+      <label>Horário<select value={form.time_format || "24h"} onChange={(event) => setForm({ ...form, time_format: event.target.value })}><option value="24h">24 horas</option><option value="12h">12 horas</option></select></label>
+      <label>Página inicial<select value={form.default_home_page || "atendimento"} onChange={(event) => setForm({ ...form, default_home_page: event.target.value })}><option value="atendimento">Atendimento</option><option value="agenda">Agenda</option><option value="listas-contatos">Listas e Contatos</option><option value="relatorios">Relatórios</option></select></label>
+      <label>Navegação<select value={form.navigation_behavior || "expanded"} onChange={(event) => setForm({ ...form, navigation_behavior: event.target.value })}><option value="expanded">Menu expandido</option><option value="compact">Menu compacto</option></select></label>
+    </div></section> : null}
+    {tab === "roles" ? <section className="settings-panel"><h2>Cargos personalizados e permissões</h2><p>Criação, edição, duplicação, página inicial e permissões ficam no módulo integrado de Chips e Usuários.</p><button className="primary-button" onClick={() => window.location.hash = "#/chips-usuarios"}>Gerenciar cargos</button></section> : null}
+    {tab === "users" ? <section className="settings-panel"><h2>Usuários</h2><p>Convites sem senha, cargo, permissões individuais, bloqueio e reenvio são gerenciados em Chips e Usuários.</p><button className="primary-button" onClick={() => window.location.hash = "#/chips-usuarios"}>Gerenciar usuários</button></section> : null}
+    {tab === "whatsapp" ? <section className="settings-panel"><h2>WhatsApp e chips</h2><div className="architecture-notice"><strong>Arquitetura Android distribuída</strong><p>Cada aparelho mantém suas próprias sessões. O CRM sincroniza tarefas e confirmações pelo Supabase. Abertura externa e confirmação manual continuam necessárias quando o aparelho não possui um agente de execução conectado.</p><small>Sem VPS obrigatório e sem API Oficial do WhatsApp.</small></div></section> : null}
+    {tab === "models" ? <section className="settings-panel"><h2>Modelos</h2><p>Distribuição sequencial ativa, com variáveis <code>{'{NOME}'}</code> e <code>{'{EMPRESA}'}</code> substituídas somente na distribuição válida.</p></section> : null}
+    {tab === "notifications" ? <section className="settings-panel"><h2>Notificações</h2><p>Categorias operacionais, retornos, agenda e sistema usam registros persistidos. Alertas de chip permanecem no módulo Chips e Usuários.</p></section> : null}
+    {tab === "security" ? <section className="settings-panel"><h2>Segurança e auditoria</h2>{data.audit?.length ? <div className="audit-list">{data.audit.map((item: AnyRecord) => <article key={item.id}><strong>{item.action}</strong><span>{item.entity_type}</span><time>{formatDate(item.created_at)}</time></article>)}</div> : <EmptyState icon="◷" title="Nenhum registro de auditoria" text="Alterações críticas aparecerão aqui após serem executadas." />}</section> : null}
+  </div>;
+}
+
 export default function ProspecDashboard() {
   const [page, setPage] = useState<PageKey>(pageFromLocation);
   const [bootstrap, setBootstrap] = useState<AnyRecord | null>(null);
@@ -1612,6 +1733,10 @@ export default function ProspecDashboard() {
     null,
   );
   const [fatal, setFatal] = useState("");
+  const [authReady, setAuthReady] = useState(false);
+  const [signedIn, setSignedIn] = useState(false);
+  const [loginEmail, setLoginEmail] = useState("");
+  const [loginSent, setLoginSent] = useState(false);
 
   const notify = useCallback((text: string, tone: "success" | "error" = "success") => {
     setToast({ text, tone });
@@ -1623,10 +1748,24 @@ export default function ProspecDashboard() {
   }, []);
 
   useEffect(() => {
+    supabase.auth.getSession().then(({ data }) => {
+      setSignedIn(Boolean(data.session));
+      setAuthReady(true);
+    });
+    const { data } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSignedIn(Boolean(session));
+      setAuthReady(true);
+    });
+    return () => data.subscription.unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    if (!authReady || !signedIn) { setLoading(false); return; }
+    setLoading(true);
     refreshBootstrap()
       .catch((error) => setFatal(error.message))
       .finally(() => setLoading(false));
-  }, [refreshBootstrap]);
+  }, [authReady, signedIn, refreshBootstrap]);
 
   useEffect(() => {
     const syncRoute = () => setPage(pageFromLocation());
@@ -1634,21 +1773,38 @@ export default function ProspecDashboard() {
     return () => window.removeEventListener("hashchange", syncRoute);
   }, []);
 
-  if (loading) {
+  if (!authReady || loading) {
     return (
       <main className="splash-screen">
-        <div className="brand-mark">KR</div>
-        <h1>PROSPEC KR</h1>
+        <img className="splash-logo" src="/prospec-kr/brand/prospec-kr-horizontal.png" alt="PROSPEC KR" />
         <LoadingBlock label="Abrindo sua operação..." />
       </main>
     );
+  }
+
+  if (!signedIn) {
+    const requestAccess = async () => {
+      const email = loginEmail.trim().toLowerCase();
+      if (!email) return;
+      const { error } = await supabase.auth.signInWithOtp({ email, options: { emailRedirectTo: `${window.location.origin}${window.location.pathname}#/inicio`, shouldCreateUser: false } });
+      if (error) { setFatal(error.message); return; }
+      setLoginSent(true);
+      setFatal("");
+    };
+    return <main className="login-page"><section className="login-card" data-build="secure-login-v1">
+      <img className="login-brand-logo" src="/prospec-kr/brand/prospec-kr-horizontal.png" alt="PROSPEC KR" />
+      <p className="eyebrow">ACESSO SEGURO</p><h1>Entrar no PROSPEC KR</h1>
+      <p>Use o e-mail que recebeu o convite. Não é necessário criar senha.</p>
+      {loginSent ? <div className="login-success"><strong>Link enviado</strong><span>Confira sua caixa de entrada e o spam.</span></div> : <><label>E-mail<input type="email" autoComplete="email" value={loginEmail} onChange={(event) => setLoginEmail(event.target.value)} placeholder="seuemail@empresa.com" /></label><button className="primary-button full" onClick={requestAccess}>Enviar link de acesso</button></>}
+      {fatal ? <p className="form-error" role="alert">{fatal}</p> : null}
+    </section></main>;
   }
 
   if (fatal || !bootstrap) {
     return (
       <main className="login-page">
         <section className="login-card error-card">
-          <div className="brand-mark">KR</div>
+          <img className="login-brand-logo" src="/prospec-kr/brand/prospec-kr-horizontal.png" alt="PROSPEC KR" />
           <h1>Não foi possível abrir o PROSPEC KR</h1>
           <p>{fatal || "A sessão administrativa direta não respondeu."}</p>
           <button
@@ -1663,7 +1819,14 @@ export default function ProspecDashboard() {
   }
 
   const role = bootstrap.profile?.role || "lawyer";
-  const nav = role === "admin" ? ADMIN_NAV : LAWYER_NAV;
+  const permissionByPage: Partial<Record<PageKey, string>> = {
+    home: "can_view_home", attendance: "can_view_home", agenda: "can_view_agenda",
+    lists: "can_view_lists", funnel: "can_view_funnels", templates: "can_view_message_templates",
+    notifications: "can_view_notifications", reports: "can_view_reports_overview",
+    "chips-users": "can_manage_chips_users", settings: "can_view_settings", profile: "can_view_profile",
+  };
+  const baseNav = role === "admin" ? ADMIN_NAV : LAWYER_NAV;
+  const nav = baseNav.filter(([key]) => role === "admin" || key === "profile" || bootstrap.permissions?.[permissionByPage[key] || ""] === true);
   const activePage = page === "chips-users" && role !== "admin" ? "home" : page;
   const titles: Record<PageKey, [string, string]> = {
     home: [
@@ -1672,6 +1835,7 @@ export default function ProspecDashboard() {
         bootstrap.profile?.full_name || "Thainá",
       )}.`,
     ],
+    attendance: ["Atendimento", "Conversas, contatos e próximas ações."],
     funnel: ["Funis", "Acompanhe contatos, avanço e conversão por etapa."],
     notifications: ["Notificações", "Acompanhe tudo que precisa da sua atenção."],
     agenda: ["Agenda", "Reuniões e compromissos da equipe."],
@@ -1690,20 +1854,30 @@ export default function ProspecDashboard() {
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
-  const operationsMode = activePage === "home" || activePage === "funnel" || activePage === "agenda" || activePage === "lists" || activePage === "templates";
+  const navigateOrLogout = async (target: PageKey, label: string) => {
+    if (label === "Sair") {
+      await supabase.auth.signOut();
+      window.location.hash = "#/inicio";
+      window.location.reload();
+      return;
+    }
+    go(target);
+  };
+
+  const operationsMode = activePage === "home" || activePage === "attendance" || activePage === "funnel" || activePage === "agenda" || activePage === "lists" || activePage === "templates";
 
   return (
     <div className={`app-shell ${operationsMode ? "operations-mode" : ""}`}>
-      {!operationsMode ? <Header
+      <Header
         title={titles[activePage][0]}
         subtitle={titles[activePage][1]}
         onMenu={() => setMenuOpen(true)}
         badge={bootstrap.counters?.notifications}
-      /> : null}
+      />
 
-      {!operationsMode ? <aside className={`side-drawer ${menuOpen ? "open" : ""}`} aria-hidden={!menuOpen}>
+      <aside className={`side-drawer ${menuOpen ? "open" : ""}`} aria-hidden={!menuOpen}>
         <div className="drawer-head">
-          <div className="brand-mark small-mark">KR</div>
+          <img className="drawer-brand-logo" src="/prospec-kr/brand/prospec-kr-horizontal.png" alt="PROSPEC KR" />
           <div>
             <strong>PROSPEC KR</strong>
             <span>{bootstrap.profile?.full_name}</span>
@@ -1713,52 +1887,42 @@ export default function ProspecDashboard() {
           </button>
         </div>
         <nav>
-          {[
-            ...nav.filter(([key]) => key !== "profile"),
-            ["templates", "Modelos de Mensagens", "✎"] as [PageKey, string, string],
-            ...(role === "admin" ? [["settings", "Configurações", "⚙"] as [PageKey, string, string]] : []),
-            ["profile", "Meu Perfil", "○"] as [PageKey, string, string],
-          ]
-            .filter(
-              ([key], index, rows) =>
-                rows.findIndex(([candidate]) => candidate === key) === index &&
-                (role === "admin" || key !== "chips-users"),
-            )
+          {nav
             .map(([key, label, icon]) => (
-              <button key={key} className={activePage === key ? "active" : ""} onClick={() => go(key)}>
+              <button key={`${key}-${label}`} className={activePage === key ? "active" : ""} onClick={() => navigateOrLogout(key, label)}>
                 <span>{icon}</span>
                 {label}
               </button>
             ))}
         </nav>
-      </aside> : null}
-      {!operationsMode && menuOpen ? <button className="drawer-backdrop" onClick={() => setMenuOpen(false)} /> : null}
+      </aside>
+      {menuOpen ? <button className="drawer-backdrop" onClick={() => setMenuOpen(false)} /> : null}
 
       <main className="app-content">
-        {activePage === "home" ? <HomeView bootstrap={bootstrap} onNavigate={go} /> : null}
+        {activePage === "home" || activePage === "attendance" ? <HomeCentral bootstrap={bootstrap} onNavigate={go} notify={notify} /> : null}
         {activePage === "funnel" ? <FunnelView notify={notify} onNavigate={go} bootstrap={bootstrap} /> : null}
         {activePage === "notifications" ? <NotificationsOfficial role={role} bootstrap={bootstrap} notify={notify} apiAction={api} onNavigate={go} /> : null}
-        {activePage === "agenda" ? <AgendaOfficial notify={notify} onNavigate={go} bootstrap={bootstrap} /> : null}
-        {activePage === "lists" ? <ListsContactsOfficial bootstrap={bootstrap} notify={notify} onNavigate={go} apiAction={api} refreshBootstrap={refreshBootstrap} /> : null}
+        {activePage === "agenda" ? <AgendaView notify={notify} /> : null}
+        {activePage === "lists" ? <ListsView bootstrap={bootstrap} notify={notify} refreshBootstrap={refreshBootstrap} /> : null}
         {activePage === "templates" ? <TemplatesOfficial role={role} bootstrap={bootstrap} notify={notify} apiAction={api} onNavigate={go} /> : null}
         {activePage === "reports" ? <ReportsOfficial role={role} bootstrap={bootstrap} notify={notify} apiAction={api} onNavigate={go} /> : null}
         {activePage === "chips-users" && role === "admin" ? (
           <ChipsUsersOfficial bootstrap={bootstrap} notify={notify} apiAction={api} />
         ) : null}
-        {activePage === "settings" && role === "admin" ? <SettingsView /> : null}
+        {activePage === "settings" && (role === "admin" || bootstrap.permissions?.can_view_settings === true) ? <SettingsOfficial notify={notify} /> : null}
         {activePage === "profile" ? (
           <ProfileView profile={bootstrap.profile} />
         ) : null}
       </main>
 
-      {!operationsMode ? <nav className="bottom-nav" aria-label="Navegação principal">
-        {nav.map(([key, label, icon]) => (
-          <button key={key} className={activePage === key ? "active" : ""} onClick={() => go(key)}>
+      <nav className="bottom-nav" aria-label="Navegação principal">
+        {nav.filter(([, label]) => label !== "Sair").slice(0, 6).map(([key, label, icon]) => (
+          <button key={`${key}-${label}`} className={activePage === key ? "active" : ""} onClick={() => go(key)}>
             <span>{icon}</span>
             <small>{label}</small>
           </button>
         ))}
-      </nav> : null}
+      </nav>
 
       {toast ? (
         <Toast
