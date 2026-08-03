@@ -6,6 +6,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import AgendaOfficial from "./AgendaOfficial";
 import ListsContactsOfficial from "./ListsContactsOfficial";
 import TemplatesOfficial from "./TemplatesOfficial";
+import ReportsOfficial from "./ReportsOfficial";
 import * as XLSX from "xlsx";
 import { supabase } from "./supabase";
 import { buildWhatsAppOpeningUrl, openingMethodLabel } from "./whatsappOpening";
@@ -1738,7 +1739,7 @@ export default function ProspecDashboard() {
         {activePage === "agenda" ? <AgendaOfficial notify={notify} onNavigate={go} bootstrap={bootstrap} /> : null}
         {activePage === "lists" ? <ListsContactsOfficial bootstrap={bootstrap} notify={notify} onNavigate={go} apiAction={api} refreshBootstrap={refreshBootstrap} /> : null}
         {activePage === "templates" ? <TemplatesOfficial role={role} bootstrap={bootstrap} notify={notify} apiAction={api} onNavigate={go} /> : null}
-        {activePage === "reports" ? <ReportsView notify={notify} /> : null}
+        {activePage === "reports" ? <ReportsOfficial role={role} bootstrap={bootstrap} notify={notify} apiAction={api} onNavigate={go} /> : null}
         {activePage === "chips-users" && role === "admin" ? (
           <ChipsUsersView notify={notify} />
         ) : null}
