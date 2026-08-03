@@ -766,6 +766,18 @@ async function getReports(profile: Json) {
     { count: contractsCount },
     { count: messagesCount },
   ] = await Promise.all([appointmentsQuery, contractsQuery, messagesQuery]);
+  const visibleListIds = [...new Set(visible.map((contact) => contact.list_id).filter(Boolean))];
+  const [{ data: lists }, { data: chips }, { data: alerts }] = await Promise.all([
+    visibleListIds.length
+      ? admin.from("contact_lists").select("*").in("id", visibleListIds).order("name")
+      : Promise.resolve({ data: [] }),
+    admin.from("chips").select("*").order("created_at"),
+    admin.from("notifications").select("id,title,category,created_at").is("read_at", null).order("created_at", { ascending: false }).limit(8),
+  ]);
+  const listCounts = visible.reduce<Record<string, number>>((acc, contact) => {
+    if (contact.list_id) acc[contact.list_id] = (acc[contact.list_id] ?? 0) + 1;
+    return acc;
+  }, {});
   return {
     total: visible.length,
     pending: visible.filter((contact) => contact.queue_status === "waiting").length,
@@ -775,6 +787,15 @@ async function getReports(profile: Json) {
     appointments: appointmentsCount ?? 0,
     contracts: contractsCount ?? 0,
     messages: messagesCount ?? 0,
+    lists: (lists ?? []).map((list) => ({ ...list, contacts_count: listCounts[list.id] ?? 0 })),
+    chips: chips ?? [],
+    chip_health: (chips ?? []).reduce<Record<string, number>>((acc, chip) => {
+      const score = Number(chip.health_score ?? 0);
+      const band = score <= 60 ? "Saudável" : score <= 80 ? "Atenção" : score <= 95 ? "Alto risco" : "Risco crítico";
+      acc[band] = (acc[band] ?? 0) + 1;
+      return acc;
+    }, {}),
+    alerts: (alerts ?? []).map((item) => ({ id: item.id, title: item.title || item.category, count: 1, page: "notifications" })),
   };
 }
 
