@@ -3,6 +3,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import AgendaOfficial from "./AgendaOfficial";
 import * as XLSX from "xlsx";
 import { supabase } from "./supabase";
 import { buildWhatsAppOpeningUrl, openingMethodLabel } from "./whatsappOpening";
@@ -1684,7 +1685,7 @@ export default function ProspecDashboard() {
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
-  const operationsMode = activePage === "home" || activePage === "funnel";
+  const operationsMode = activePage === "home" || activePage === "funnel" || activePage === "agenda";
 
   return (
     <div className={`app-shell ${operationsMode ? "operations-mode" : ""}`}>
@@ -1732,7 +1733,7 @@ export default function ProspecDashboard() {
         {activePage === "home" ? <HomeView bootstrap={bootstrap} onNavigate={go} /> : null}
         {activePage === "funnel" ? <FunnelView notify={notify} onNavigate={go} bootstrap={bootstrap} /> : null}
         {activePage === "notifications" ? <NotificationsView notify={notify} /> : null}
-        {activePage === "agenda" ? <AgendaView notify={notify} /> : null}
+        {activePage === "agenda" ? <AgendaOfficial notify={notify} onNavigate={go} bootstrap={bootstrap} /> : null}
         {activePage === "lists" ? (
           <ListsView
             bootstrap={bootstrap}
