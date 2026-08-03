@@ -4,6 +4,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import AgendaOfficial from "./AgendaOfficial";
+import ListsContactsOfficial from "./ListsContactsOfficial";
 import * as XLSX from "xlsx";
 import { supabase } from "./supabase";
 import { buildWhatsAppOpeningUrl, openingMethodLabel } from "./whatsappOpening";
@@ -1685,7 +1686,7 @@ export default function ProspecDashboard() {
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
-  const operationsMode = activePage === "home" || activePage === "funnel" || activePage === "agenda";
+  const operationsMode = activePage === "home" || activePage === "funnel" || activePage === "agenda" || activePage === "lists";
 
   return (
     <div className={`app-shell ${operationsMode ? "operations-mode" : ""}`}>
@@ -1734,13 +1735,7 @@ export default function ProspecDashboard() {
         {activePage === "funnel" ? <FunnelView notify={notify} onNavigate={go} bootstrap={bootstrap} /> : null}
         {activePage === "notifications" ? <NotificationsView notify={notify} /> : null}
         {activePage === "agenda" ? <AgendaOfficial notify={notify} onNavigate={go} bootstrap={bootstrap} /> : null}
-        {activePage === "lists" ? (
-          <ListsView
-            bootstrap={bootstrap}
-            notify={notify}
-            refreshBootstrap={refreshBootstrap}
-          />
-        ) : null}
+        {activePage === "lists" ? <ListsContactsOfficial bootstrap={bootstrap} notify={notify} onNavigate={go} apiAction={api} refreshBootstrap={refreshBootstrap} /> : null}
         {activePage === "templates" ? <TemplatesView role={role} notify={notify} /> : null}
         {activePage === "reports" ? <ReportsView notify={notify} /> : null}
         {activePage === "chips-users" && role === "admin" ? (
