@@ -166,7 +166,7 @@ export default function TemplatesOfficial({ role, bootstrap, notify, apiAction, 
   const addTag = () => { const clean = tagDraft.trim(); if (clean && !tags.includes(clean)) setTags([...tags, clean]); setTagDraft(""); };
 
   const nav = isAdmin ? NAV_ADMIN : NAV_LAWYER;
-  return <div className="templates-official-shell">
+  return <div className="templates-official-shell" data-module-version="modelos-mensagens-v2">
     <aside className="templates-sidebar">
       <div className="templates-brand"><span>✧</span> PROSPEC <b>KR</b></div>
       <nav>{nav.map(([key,label,icon]) => <button key={key} className={key === "templates" ? "active" : ""} onClick={() => onNavigate(key)}><span>{icon}</span>{label}</button>)}</nav>
