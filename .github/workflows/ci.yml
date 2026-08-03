@@ -47,3 +47,6 @@ jobs:
           VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}
           VITE_APP_URL: https://thainakr.github.io/prospec-kr/
         run: npm run build
+
+      - name: Testes funcionais estruturais
+        run: npm run test

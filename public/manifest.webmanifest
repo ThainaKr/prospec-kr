@@ -1,0 +1,17 @@
+{
+  "name": "PROSPEC KR",
+  "short_name": "PROSPEC KR",
+  "description": "Central de atendimento e gestão comercial",
+  "start_url": "/prospec-kr/#/inicio",
+  "display": "standalone",
+  "background_color": "#040606",
+  "theme_color": "#040606",
+  "icons": [
+    {
+      "src": "/prospec-kr/brand/prospec-kr-icon.png",
+      "sizes": "1536x1024",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}

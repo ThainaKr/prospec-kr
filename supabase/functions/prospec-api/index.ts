@@ -40,32 +40,21 @@ const cleanPhone = (value: string | null | undefined) => {
   return digits.startsWith("55") ? digits : `55${digits}`;
 };
 
-const DIRECT_ADMIN_PROFILE_ID = "0cbdd1a9-6cbe-402f-a161-96222aa35ea9";
-
 async function authenticate(request: Request) {
   const authorization = request.headers.get("Authorization") ?? "";
   const apiKey = request.headers.get("apikey") ?? "";
   const token = authorization.replace(/^Bearer\s+/i, "").trim() || apiKey.trim();
   if (!token) throw new Error("Requisição do aplicativo não identificada.");
 
-  const { data: userData } = await admin.auth.getUser(token);
-  const profileId = userData.user?.id ?? DIRECT_ADMIN_PROFILE_ID;
+  const { data: userData, error: userError } = await admin.auth.getUser(token);
+  if (userError || !userData.user?.id) throw new Error("Sessão inválida ou expirada.");
+  const profileId = userData.user.id;
 
-  let { data: profile, error: profileError } = await admin
+  const { data: profile, error: profileError } = await admin
     .from("profiles")
     .select("*")
     .eq("id", profileId)
     .maybeSingle();
-
-  if (!profile && profileId !== DIRECT_ADMIN_PROFILE_ID) {
-    const fallback = await admin
-      .from("profiles")
-      .select("*")
-      .eq("id", DIRECT_ADMIN_PROFILE_ID)
-      .maybeSingle();
-    profile = fallback.data;
-    profileError = fallback.error;
-  }
 
   if (profileError) throw profileError;
   if (!profile || !profile.active || profile.status === "blocked") {
@@ -1091,6 +1080,30 @@ async function exportSpreadsheet(profile: Json) {
   return { lists: result };
 }
 
+async function getSettings(profile: Json) {
+  const [{ data: settingRows, error }, { data: sessions }, { data: audit }] = await Promise.all([
+    admin.from("app_settings").select("key,value,updated_at"),
+    admin.from("audit_logs").select("id,action,created_at,details").eq("actor_id", profile.id).eq("entity_type", "session").order("created_at", { ascending: false }).limit(10),
+    profile.role === "admin"
+      ? admin.from("audit_logs").select("id,action,entity_type,entity_id,details,created_at,actor_id").order("created_at", { ascending: false }).limit(50)
+      : Promise.resolve({ data: [] }),
+  ]);
+  if (error) throw error;
+  const byKey = Object.fromEntries((settingRows ?? []).map((row) => [row.key, row.value]));
+  const settings = { ...(byKey.company_profile as Json ?? {}), notification_preferences: byKey.notification_preferences ?? {}, model_preferences: byKey.model_preferences ?? {} };
+  return { settings, sessions: sessions ?? [], audit: audit ?? [] };
+}
+
+async function saveSettings(profile: Json, payload: Json) {
+  if (profile.role !== "admin") throw new Error("Apenas a Administradora pode alterar configurações gerais.");
+  const allowed = ["company_name", "date_format", "time_format", "timezone", "default_home_page", "navigation_behavior"];
+  const updates = Object.fromEntries(allowed.filter((key) => payload[key] !== undefined).map((key) => [key, payload[key]]));
+  const { data, error } = await admin.from("app_settings").upsert({ key: "company_profile", value: updates, updated_by: profile.id, updated_at: new Date().toISOString() }, { onConflict: "key" }).select("value").single();
+  if (error) throw error;
+  await admin.from("audit_logs").insert({ actor_id: profile.id, action: "settings.updated", entity_type: "app_settings", entity_id: "default", details: { fields: Object.keys(updates) } });
+  return data.value;
+}
+
 Deno.serve(async (request: Request) => {
   if (request.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
@@ -1118,6 +1131,7 @@ Deno.serve(async (request: Request) => {
       export_spreadsheet: "can_view_lists",
       save_work_state: "can_view_lists",
       mark_in_progress: "can_view_lists",
+      settings: "can_view_settings",
     };
     const permissionKey = permissionByAction[action];
     if (
@@ -1216,6 +1230,12 @@ Deno.serve(async (request: Request) => {
         break;
       case "reports":
         data = await getReports(profile);
+        break;
+      case "settings":
+        data = await getSettings(profile);
+        break;
+      case "save_settings":
+        data = await saveSettings(profile, payload);
         break;
       case "recover_contact":
         data = await recoverContact(profile, payload);
